@@ -8,6 +8,15 @@ project(franka_experiments)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  controller_interface
+  dynamic_reconfigure
+  eigen_conversions
+  franka_hw
+  franka_gripper
+  hardware_interface
+  joint_limits_interface
+  pluginlib
+  realtime_tools
   roscpp
   rospy
   std_msgs
@@ -15,6 +24,15 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf_conversions
 )
+
+find_package(Eigen3 REQUIRED)
+find_package(Franka 0.9.0 QUIET)
+if(NOT Franka_FOUND)
+  find_package(Franka 0.8.0 REQUIRED)
+endif()
+
+# merge Franka + INCLUDE_DIRS in topological order
+list_insert_in_workspace_order(catkin_INCLUDE_DIRS ${Franka_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -106,10 +124,26 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
- INCLUDE_DIRS include
-#  LIBRARIES franka_experiments
-#  CATKIN_DEPENDS roscpp rospy
-#  DEPENDS system_lib
+  INCLUDE_DIRS include
+  LIBRARIES franka_experiments
+  CATKIN_DEPENDS
+    controller_interface
+    dynamic_reconfigure
+    eigen_conversions
+    franka_hw
+    franka_gripper
+    geometry_msgs
+    hardware_interface
+    joint_limits_interface
+    tf
+    tf_conversions
+    message_runtime
+    pluginlib
+    realtime_tools
+    roscpp
+    urdf
+    visualization_msgs
+  DEPENDS Franka
 )
 
 ###########
@@ -128,9 +162,31 @@ target_link_libraries(trajectory_pub_node ${catkin_LIBRARIES})
 add_dependencies(trajectory_pub_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/franka_experiments.cpp
-# )
+add_library(franka_experiments
+  src/cartesian_traject_controller.cpp
+)
+
+
+add_dependencies(franka_experiments
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+  # ${PROJECT_NAME}_generate_messages_cpp
+  # ${PROJECT_NAME}_gencpp
+  # ${PROJECT_NAME}_gencfg
+)
+
+target_link_libraries(franka_experiments PUBLIC
+  ${Franka_LIBRARIES}
+  ${catkin_LIBRARIES}
+)
+
+target_include_directories(franka_experiments SYSTEM PUBLIC
+  ${EIGEN3_INCLUDE_DIRS}
+  ${catkin_INCLUDE_DIRS}
+)
+target_include_directories(franka_experiments PUBLIC
+  include
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -160,6 +216,24 @@ add_dependencies(trajectory_pub_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catki
 #############
 ## Install ##
 #############
+
+install(TARGETS franka_experiments
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+install(DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)
+install(DIRECTORY launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+install(DIRECTORY config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
+install(FILES franka_example_controllers_plugin.xml
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
 
 # all install targets should use catkin DESTINATION variables
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
