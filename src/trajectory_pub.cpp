@@ -9,14 +9,15 @@
 
 TrajectoryPubNode::TrajectoryPubNode(int rate):
                 nh{},
-                pub{nh.advertise<geometry_msgs::PoseStamped>("cartesian_impedance_example_controller/equilibrium_pose", 10)},
+                pub{nh.advertise<geometry_msgs::PoseStamped>("cartesian_traject_controller/trajectory_pose", 10)},
                 r{ros::Rate(rate)},
+                tfBuffer{ros::Duration(1, 0)},
                 tfListener{tfBuffer}
-{
-}
+{  }
 
 int TrajectoryPubNode::Start()
 {
+    ros::Duration(1.0).sleep(); // waiting to build up tf cache
     ROS_INFO("Moving to start position");
     drive_to_start(fix_x, start_y, fix_z, 1000);
 
@@ -53,8 +54,10 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     // transformStamped = tfBuffer.lookupTransform("panda_link0", "panda_EE", ros::Time(0));
     geometry_msgs::TransformStamped transformStamped;
     try{
-        transformStamped = tfBuffer.lookupTransform("panda_link0", "panda_EE", ros::Time::now(), 
+        transformStamped = tfBuffer.lookupTransform("panda_link0", "panda_EE", ros::Time(0), 
                                                     ros::Duration(3.0));
+        //transformStamped = tfBuffer.waitForTransform("panda_link0", "panda_EE", ros::Time(0), 
+        //                                            ros::Duration(3.0));                   
     } catch (tf2::TransformException &ex) {
         ROS_WARN("Could NOT find transform: %s", ex.what());
     }
@@ -88,7 +91,7 @@ TrajectoryPubNode::~TrajectoryPubNode() {}
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "geometry_msgs_node");
+    ros::init(argc, argv, "trajectory_pub_node");
     ROS_INFO("Starting node");
     TrajectoryPubNode node{100};
     node.Start();

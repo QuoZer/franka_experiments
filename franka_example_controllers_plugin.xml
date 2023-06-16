@@ -1,0 +1,10 @@
+<library path="lib/libfranka_experiments">
+  
+
+  <class name="franka_example_controllers/CartesianTrajectoryController" type="franka_example_controllers::CartesianTrajectoryController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      TEST TEST TEST TEST Drives the arm to a predifined location TEST TEST TEST
+    </description>
+  </class>
+ 
+</library>
