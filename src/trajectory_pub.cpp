@@ -49,6 +49,7 @@ int TrajectoryPubNode::Start()
     return 0;
 }
 
+//TODO: make samples proportional to distance 
 void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double start_z, int samples)
 {
     // transformStamped = tfBuffer.lookupTransform("panda_link0", "panda_EE", ros::Time(0));
