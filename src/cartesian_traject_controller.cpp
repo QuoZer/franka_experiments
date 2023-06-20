@@ -19,8 +19,6 @@ bool  CartesianTrajectoryController::init(hardware_interface::RobotHW* robot_hw,
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
-  coords = { {0.5243, 0.0956, 0.6247}, {0.5743, 0.0956, 0.6247}, {0.5743, 0.1456, 0.6247}, {0.5243, 0.0956, 0.6247}}; 
-  coord_index = 0; 
 
   mode = 0;
   sub_equilibrium_pose_ = node_handle.subscribe(
