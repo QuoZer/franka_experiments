@@ -260,10 +260,15 @@ void  CartesianTrajectoryController::trajectoryCallback(
     mode = 1; // trajectory mode as we get the first point
     sub_equilibrium_pose_.shutdown(); // hmmm
   }
+  Eigen::Vector3d last_position_d_target(position_d_target_);
   position_d_target_ << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
   Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
   orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
       msg->pose.orientation.z, msg->pose.orientation.w;
+  if ((position_d_target_ - last_position_d_target).norm() > 0.1) {
+    position_d_target_ = last_position_d_target;
+    ROS_ERROR("A dangerous goal jump detected");
+  }
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
