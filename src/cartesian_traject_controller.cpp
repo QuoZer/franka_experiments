@@ -268,6 +268,7 @@ void  CartesianTrajectoryController::trajectoryCallback(
   if ((position_d_target_ - last_position_d_target).norm() > 0.1) {
     position_d_target_ = last_position_d_target;
     ROS_ERROR("A dangerous goal jump detected");
+    ros::shutdown();
   }
   if (last_orientation_d_target.coeffs().dot(orientation_d_target_.coeffs()) < 0.0) {
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
