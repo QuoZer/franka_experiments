@@ -6,20 +6,28 @@
 #include <franka_experiments/trajectory_pub.h>
 //#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+/*
+    
+
+*/
+
+
 
 TrajectoryPubNode::TrajectoryPubNode(int rate):
                 nh{},
                 pub{nh.advertise<geometry_msgs::PoseStamped>("cartesian_traject_controller/trajectory_pose", 10)},
+                state_sub{nh.subscribe<geometry_msgs::WrenchStamped>("franka_state_controller/F_ext", 10, &TrajectoryPubNode::state_callback, this)},
                 r{ros::Rate(rate)},
                 tfBuffer{ros::Duration(1, 0)},
-                tfListener{tfBuffer}
+                tfListener{tfBuffer},
+                window_size_{rate/2}
 {  }
 
 int TrajectoryPubNode::Start()
 {
     ros::Duration(1.0).sleep(); // waiting to build up tf cache
     ROS_INFO("Moving to start position");
-    drive_to_start(fix_x, start_y, fix_z, 1000);
+    drive_to_start(fix_x, start_y, fix_z, 0.1);
 
     ros::Duration(5.0).sleep();  // Wait for the robot to reach the start position
 
@@ -32,8 +40,18 @@ int TrajectoryPubNode::Start()
     poseStamped.pose.orientation.w =  2.58384e-06;  // Set orientation to 
     //poseStamped.pose.orientation.normalize();
     ROS_INFO("Moving in a straight line");
-    for (double y = start_y; ros::ok() && y < distance+start_y; y += velocity / rate)
+    double y = 0;
+    double dy = velocity / rate;
+    // 1 ts = 1/rate seconds
+    for (int ts = 0; ros::ok() && y < distance+start_y; ts++)
     {
+        if (interaction_ended)
+        {
+            interaction_ended = false;
+            ts += total_time_*rate; // skip to a goal 'interaction time' ahead
+            ROS_INFO("Interaction ended, skipping %f timestamps", total_time_*rate);
+        }
+        y = start_y + dy*ts;
         poseStamped.header.stamp = ros::Time::now();
         poseStamped.pose.position.y = y;
         poseStamped.pose.position.x = fix_x;
@@ -50,15 +68,12 @@ int TrajectoryPubNode::Start()
 }
 
 //TODO: make samples proportional to distance 
-void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double start_z, int samples)
+void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double start_z, double speed)
 {
-    // transformStamped = tfBuffer.lookupTransform("panda_link0", "panda_EE", ros::Time(0));
     geometry_msgs::TransformStamped transformStamped;
     try{
         transformStamped = tfBuffer.lookupTransform("panda_link0", "panda_EE", ros::Time(0), 
-                                                    ros::Duration(3.0));
-        //transformStamped = tfBuffer.waitForTransform("panda_link0", "panda_EE", ros::Time(0), 
-        //                                            ros::Duration(3.0));                   
+                                                    ros::Duration(3.0));                 
     } catch (tf2::TransformException &ex) {
         ROS_WARN("Could NOT find transform: %s", ex.what());
     }
@@ -68,8 +83,9 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     double dx = start_x - cur_x;
     double dy = start_y - cur_y;
     double dz = start_z - cur_z;
-    //double distance = sqrt(dx*dx + dy*dy + dz*dz);
-    //double velocity = distance / samples;
+    double distance = sqrt(dx*dx + dy*dy + dz*dz);
+    double samples = rate*distance / speed;
+    ROS_INFO("in drive_to_start: samples = %f", samples);
     geometry_msgs::PoseStamped startPose;
     startPose.header.frame_id = "panda_link0";
     for (double progress = 1; ros::ok() && progress <= samples; progress += 1)
@@ -84,6 +100,47 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
         ros::spinOnce();
         r.sleep();
     }
+}
+
+void TrajectoryPubNode::state_callback(const geometry_msgs::WrenchStamped::ConstPtr& msg)
+{
+    F_ext = sqrt(msg->wrench.force.x*msg->wrench.force.x + 
+                 msg->wrench.force.y*msg->wrench.force.y + 
+                 msg->wrench.force.z*msg->wrench.force.z);   
+
+    if (filter(F_ext) > F_threshold)
+    {
+        if (!above_threshold_)
+        {
+            // The value just went above the threshold
+            above_threshold_ = true;
+            start_time_ = ros::Time::now();
+        }
+    }
+    else if (above_threshold_)
+    {
+        // The value just went below the threshold
+        above_threshold_ = false;
+        interaction_ended = true;
+        total_time_ = (ros::Time::now() - start_time_).toSec();
+    }
+    
+
+    //ROS_INFO("Total time above threshold: %f", total_time_);
+}
+
+double TrajectoryPubNode::filter(double new_value)
+{
+    if (window_.size() >= window_size_)
+    {
+        sum_ -= window_.front();
+        window_.pop_front();
+    }
+
+    window_.push_back(new_value);
+    sum_ += new_value;
+
+    return sum_ / window_.size();
 }
 
 TrajectoryPubNode::~TrajectoryPubNode() {}
