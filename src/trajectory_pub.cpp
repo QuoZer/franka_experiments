@@ -20,7 +20,7 @@ TrajectoryPubNode::TrajectoryPubNode(int rate):
                 r{ros::Rate(rate)},
                 tfBuffer{ros::Duration(1, 0)},
                 tfListener{tfBuffer},
-                window_size_{rate/2}
+                window_size_{rate/5}
 {  }
 
 int TrajectoryPubNode::Start()
