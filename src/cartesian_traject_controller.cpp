@@ -265,7 +265,7 @@ void  CartesianTrajectoryController::trajectoryCallback(
   Eigen::Quaterniond last_orientation_d_target(orientation_d_target_);
   orientation_d_target_.coeffs() << msg->pose.orientation.x, msg->pose.orientation.y,
       msg->pose.orientation.z, msg->pose.orientation.w;
-  if ((position_d_target_ - last_position_d_target).norm() > 0.1) {
+  if ((position_d_target_ - last_position_d_target).norm() > 0.3) {
     position_d_target_ = last_position_d_target;
     ROS_ERROR("A dangerous goal jump detected");
     ros::shutdown();
