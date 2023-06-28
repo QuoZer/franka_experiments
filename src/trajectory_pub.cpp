@@ -18,11 +18,13 @@ TrajectoryPubNode::TrajectoryPubNode(int in_rate):
                 rate(in_rate),
                 pub{nh.advertise<geometry_msgs::PoseStamped>("cartesian_traject_controller/trajectory_pose", 10)},
                 state_sub{nh.subscribe<geometry_msgs::WrenchStamped>("franka_state_controller/F_ext", 10, &TrajectoryPubNode::state_callback, this)},
-                r{ros::Rate(rate)},
+                r{ros::Rate(in_rate)},
                 tfBuffer{ros::Duration(1, 0)},
                 tfListener{tfBuffer},
                 window_size_{20} // 20ts 
-{  }
+{  
+    //ROS_INFO("Node parameters: rate = %d, in_rate = %d, ros rate = %f", rate, in_rate, 1/r.expectedCycleTime().toSec());
+}
 
 int TrajectoryPubNode::Start()
 {
@@ -87,15 +89,19 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     double dz = start_z - cur_z;
     double distance = sqrt(dx*dx + dy*dy + dz*dz);
     double samples = rate*distance / speed;
+    dx /= samples;
+    dy /= samples;
+    dz /= samples;
     ROS_INFO("in drive_to_start: distance = %f, samples = %f", distance, samples);
     geometry_msgs::PoseStamped startPose;
     startPose.header.frame_id = "panda_link0";
+
     for (int progress = 1; ros::ok() && progress <= samples; progress += 1)
     {
         startPose.header.stamp = ros::Time::now();
-        startPose.pose.position.y = cur_y + dy * progress / samples;
-        startPose.pose.position.x = cur_x + dx * progress / samples;
-        startPose.pose.position.z = cur_z + dz * progress / samples;
+        startPose.pose.position.y = cur_y + dy * progress;
+        startPose.pose.position.x = cur_x + dx * progress;
+        startPose.pose.position.z = cur_z + dz * progress;
         
         pub.publish(startPose);
 
@@ -153,7 +159,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "trajectory_pub_node");
     ROS_INFO("Starting node");
-    TrajectoryPubNode node{100};
+    TrajectoryPubNode node{600};
     node.Start();
 
     return 0;
