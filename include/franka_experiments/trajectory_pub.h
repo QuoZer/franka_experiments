@@ -18,7 +18,7 @@ private:
     tf2_ros::Buffer tfBuffer;
     tf2_ros::TransformListener tfListener;
     /* data */
-    double rate = 100.0;  // Hz
+    int rate;  // Hz
     double start_y = -0.5;
     double distance = 1.0;  // meters
     double velocity = 0.05;  // meters/second

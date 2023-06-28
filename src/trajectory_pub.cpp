@@ -13,23 +13,24 @@
 
 
 
-TrajectoryPubNode::TrajectoryPubNode(int rate):
+TrajectoryPubNode::TrajectoryPubNode(int in_rate):
                 nh{},
+                rate(in_rate),
                 pub{nh.advertise<geometry_msgs::PoseStamped>("cartesian_traject_controller/trajectory_pose", 10)},
                 state_sub{nh.subscribe<geometry_msgs::WrenchStamped>("franka_state_controller/F_ext", 10, &TrajectoryPubNode::state_callback, this)},
                 r{ros::Rate(rate)},
                 tfBuffer{ros::Duration(1, 0)},
                 tfListener{tfBuffer},
-                window_size_{rate/5}
+                window_size_{20} // 20ts 
 {  }
 
 int TrajectoryPubNode::Start()
 {
     ros::Duration(1.0).sleep(); // waiting to build up tf cache
-    ROS_INFO("Moving to start position");
+    ROS_INFO("Moving to the start position");
     drive_to_start(fix_x, start_y, fix_z, 0.1);
 
-    ros::Duration(5.0).sleep();  // Wait for the robot to reach the start position
+    ros::Duration(3.0).sleep();  // Wait for the robot to reach the start position
 
     // Fixed orintation
     geometry_msgs::PoseStamped poseStamped;
@@ -48,8 +49,9 @@ int TrajectoryPubNode::Start()
         if (interaction_ended)
         {
             interaction_ended = false;
-            ts += total_time_*rate; // skip to a goal 'interaction time' ahead
-            ROS_INFO("Interaction ended, skipping %f timestamps", total_time_*rate);
+            int dts = static_cast <int> (std::floor(total_time_*rate)); // skip to a goal 'interaction time' ahead
+            ts += dts;
+            ROS_INFO("Interaction ended, skipping %d timestamps", dts);
         }
         y = start_y + dy*ts;
         poseStamped.header.stamp = ros::Time::now();
@@ -67,7 +69,7 @@ int TrajectoryPubNode::Start()
     return 0;
 }
 
-//TODO: make samples proportional to distance 
+
 void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double start_z, double speed)
 {
     geometry_msgs::TransformStamped transformStamped;
@@ -88,7 +90,7 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     ROS_INFO("in drive_to_start: samples = %f", samples);
     geometry_msgs::PoseStamped startPose;
     startPose.header.frame_id = "panda_link0";
-    for (double progress = 1; ros::ok() && progress <= samples; progress += 1)
+    for (int progress = 1; ros::ok() && progress <= samples; progress += 1)
     {
         startPose.header.stamp = ros::Time::now();
         startPose.pose.position.y = cur_y + dy * progress / samples;
@@ -151,7 +153,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "trajectory_pub_node");
     ROS_INFO("Starting node");
-    TrajectoryPubNode node{100};
+    TrajectoryPubNode node{500};
     node.Start();
 
     return 0;
