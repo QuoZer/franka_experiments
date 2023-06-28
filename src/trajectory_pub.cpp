@@ -87,7 +87,7 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     double dz = start_z - cur_z;
     double distance = sqrt(dx*dx + dy*dy + dz*dz);
     double samples = rate*distance / speed;
-    ROS_INFO("in drive_to_start: samples = %f", samples);
+    ROS_INFO("in drive_to_start: distance = %f, samples = %f", distance, samples);
     geometry_msgs::PoseStamped startPose;
     startPose.header.frame_id = "panda_link0";
     for (int progress = 1; ros::ok() && progress <= samples; progress += 1)
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "trajectory_pub_node");
     ROS_INFO("Starting node");
-    TrajectoryPubNode node{500};
+    TrajectoryPubNode node{100};
     node.Start();
 
     return 0;
