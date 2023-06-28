@@ -25,7 +25,7 @@ private:
     double fix_x = 0.3;
     double fix_z = 0.48;
     double F_ext = 0.0;
-    double F_threshold = 10.0;
+    double F_threshold;
     bool above_threshold_ = false; 
     bool interaction_ended = false;
     ros::Time start_time_;

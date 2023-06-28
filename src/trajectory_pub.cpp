@@ -16,6 +16,7 @@
 TrajectoryPubNode::TrajectoryPubNode(int in_rate):
                 nh{},
                 rate(in_rate),
+                F_threshold{5.0},      // N
                 pub{nh.advertise<geometry_msgs::PoseStamped>("cartesian_traject_controller/trajectory_pose", 10)},
                 state_sub{nh.subscribe<geometry_msgs::WrenchStamped>("franka_state_controller/F_ext", 10, &TrajectoryPubNode::state_callback, this)},
                 r{ros::Rate(in_rate)},
@@ -88,11 +89,11 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     double dy = start_y - cur_y;
     double dz = start_z - cur_z;
     double distance = sqrt(dx*dx + dy*dy + dz*dz);
-    double samples = rate*distance / speed;
+    int samples = static_cast <int> (std::ceil(rate*distance / speed));
     dx /= samples;
     dy /= samples;
     dz /= samples;
-    ROS_INFO("in drive_to_start: distance = %f, samples = %f", distance, samples);
+    ROS_INFO("in drive_to_start: distance = %f, samples = %d", distance, samples);
     geometry_msgs::PoseStamped startPose;
     startPose.header.frame_id = "panda_link0";
 
