@@ -22,17 +22,35 @@ if __name__ == "__main__":
     print(f"Current ee orientation: {ee_quat}  (xyzw)")
 
     # Command robot to ee xyz position
-    ee_pos_desired = torch.Tensor([0.5, -0.5, 0.4])
+    ee_pos_desired = torch.Tensor([0.4, -0.35, 0.2])
     print(f"\nMoving ee pos to: {ee_pos_desired} ...\n")
     state_log = robot.move_to_ee_pose(
-        position=ee_pos_desired, orientation=None, time_to_go=5.0
+        position=ee_pos_desired, orientation=None, #time_to_go=3.0
+        op_space_interp=True
     )
 
     # Command robot to ee xyz position
-    ee_pos_desired = torch.Tensor([0.5, 0.5, 0.4])
+    ee_pos_desired = torch.Tensor([0.4, 0.35, 0.2])
     print(f"\nMoving ee pos to: {ee_pos_desired} ...\n")
     state_log = robot.move_to_ee_pose(
-        position=ee_pos_desired, orientation=None, time_to_go=10.0
+       position=ee_pos_desired, orientation=None, #time_to_go=7.0,
+       op_space_interp=True
+    )
+
+    # Command robot to ee xyz position
+    ee_pos_desired = torch.Tensor([0.4, 0.35, 0.5])
+    print(f"\nMoving ee pos to: {ee_pos_desired} ...\n")
+    state_log = robot.move_to_ee_pose(
+       position=ee_pos_desired, orientation=None, #time_to_go=10.0
+       op_space_interp=True
+    )
+
+    # Command robot to ee xyz position
+    ee_pos_desired = torch.Tensor([0.4, -0.35, 0.5])
+    print(f"\nMoving ee pos to: {ee_pos_desired} ...\n")
+    state_log = robot.move_to_ee_pose(
+       position=ee_pos_desired, orientation=None, #time_to_go=10.0
+       op_space_interp=True
     )
 
     # Get updated ee pose
