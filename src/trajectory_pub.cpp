@@ -93,7 +93,7 @@ void TrajectoryPubNode::drive_to_start(double start_x, double start_y, double st
     dx /= samples;
     dy /= samples;
     dz /= samples;
-    ROS_INFO("in drive_to_start: distance = %f, samples = %d", distance, samples);
+    ROS_INFO("Driving to start: distance = %f, samples = %d", distance, samples);
     geometry_msgs::PoseStamped startPose;
     startPose.header.frame_id = "panda_link0";
 
