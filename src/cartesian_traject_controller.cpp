@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <memory>
+#include <thread>
 
 #include <controller_interface/controller_base.h>
 #include <franka/robot_state.h>
@@ -274,6 +275,7 @@ void  CartesianTrajectoryController::trajectoryCallback(
     orientation_d_target_.coeffs() << -orientation_d_target_.coeffs();
   }
 }
+
 
 }  // namespace franka_example_controllers
 

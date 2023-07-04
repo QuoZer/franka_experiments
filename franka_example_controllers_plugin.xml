@@ -7,4 +7,10 @@
     </description>
   </class>
  
+  <class name="franka_example_controllers/ShyController" type="franka_example_controllers::ShyController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller based on trajectory deformation paper
+    </description>
+  </class>
+
 </library>
