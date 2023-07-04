@@ -37,24 +37,6 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
 
-  std::vector<double> k_gains_vec;
-  if (!node_handle.getParam("k_gains", k_gains_vec) || k_gains_.size() != 7) {
-    ROS_ERROR(
-        "ShyController:  Invalid or no k_gain parameters provided, aborting "
-        "controller init!");
-    return false;
-  }
-  k_gains_ =  Eigen::Map<Eigen::Matrix<double, 7, 1>>(k_gains_vec.data()).asDiagonal();
-
-  std::vector<double> d_gains_vec;
-  if (!node_handle.getParam("d_gains", d_gains_vec) || d_gains_.size() != 7) {
-    ROS_ERROR(
-        "ShyController:  Invalid or no d_gain parameters provided, aborting "
-        "controller init!");
-    return false;
-  }  
-  d_gains_ = Eigen::Map<Eigen::Matrix<double, 7, 1>>(d_gains_vec.data()).asDiagonal();
-
   if (!node_handle.getParam("trajectory_deformed_length", trajectory_deformed_length)) {
     ROS_ERROR_STREAM(" ShyController: Could not read parameter trajectory_deformed_length");
     return false;
@@ -64,6 +46,24 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
     ROS_ERROR_STREAM(" ShyController: Could not read parameter admittance");
     return false;
   }
+
+  std::vector<double> k_gains_vec;
+  if (!node_handle.getParam("k_gains", k_gains_vec) || k_gains_vec.size() != 7) {
+    ROS_ERROR(
+        "ShyController:  Invalid or no k_gain parameters provided, aborting "
+        "controller init!");
+    return false;
+  }
+  k_gains_ =  Eigen::Map<Eigen::Matrix<double, 7, 1>>(k_gains_vec.data()).asDiagonal();
+
+  std::vector<double> d_gains_vec;
+  if (!node_handle.getParam("d_gains", d_gains_vec) || d_gains_vec.size() != 7) {
+    ROS_ERROR(
+        "ShyController:  Invalid or no d_gain parameters provided, aborting "
+        "controller init!");
+    return false;
+  }  
+  d_gains_ = Eigen::Map<Eigen::Matrix<double, 7, 1>>(d_gains_vec.data()).asDiagonal();
 
   auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
   if (model_interface == nullptr) {
@@ -181,6 +181,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
   H = std::sqrt(N) * G / G.norm();    // check if norm is correct
+  ROS_INFO("Finished precompute");
 
 }
 
@@ -213,15 +214,15 @@ void  ShyController::update(const ros::Time& /*time*/,
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
     // parallize? 
-    for (int dim = 0; dim < 6; dim++)
+    for (int dim = 0; dim < 7; dim++)
     {
       // calculate deformation for each joint separetely
-      //Uh(slow_index) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
+      // Uh(slow_index) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
       //deform_trajectory_positions.col(dim) = deform_trajectory_positions.col(dim) + trajectory_sample_time/pow(10, 9) * H * Uh.transpose();
       // Nx1 = Nx1 + 1x1 * Nx1 * Nx1.T
-      deform_trajectory_positions.col(dim) = deform_trajectory_positions.col(dim) + trajectory_sample_time/pow(10, 9) * H * uh(dim);
+      deform_trajectory_positions.col(dim) = deform_trajectory_positions.col(dim) + admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
       // Nx1 = Nx1 + 1x1 * Nx1 * 1x1
-      //Uh(slow_index) = 0;
+      // Uh(slow_index) = 0;
     }
     // update q_d and qd_d
     q_d = deform_trajectory_positions.row(slow_index);
@@ -231,10 +232,11 @@ void  ShyController::update(const ros::Time& /*time*/,
     deform_trajectory_positions.block(0, 0, deform_trajectory_positions.rows()-1, deform_trajectory_positions.cols()) = 
         deform_trajectory_positions.block(1, 0, deform_trajectory_positions.rows()-1, deform_trajectory_positions.cols());
     // add new new waypoint to the end
-    deform_trajectory_positions.row(deform_trajectory_positions.rows()-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
+    deform_trajectory_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
     
-    if (slow_index == trajectory_deformed_length - 1)
+    if (slow_index == trajectory_length - 1)
     {
+      ROS_INFO("Trajectory execution finished after %d waypoints", slow_index);
       slow_index = 0;
       haveTrajectory = false;
     }
@@ -250,11 +252,11 @@ void  ShyController::update(const ros::Time& /*time*/,
       
   // saturation
   tau_d_saturated = saturateTorqueRate(tau_d_calculated, tau_J_d);
-
+  // ROS_INFO("tau_d_saturated 0 and 6: %f, %f", tau_d_calculated[0], tau_d_calculated[6]);
   // cartiesian example has nullspace stiffness as well, skipping for now
 
   for (size_t i = 0; i < 7; ++i) {
-    joint_handles_[i].setCommand(tau_d_saturated[i]);
+    joint_handles_[i].setCommand(tau_d_calculated[i]);
   }
 
 
@@ -332,7 +334,7 @@ void  ShyController::trajectoryCallback(
   num_of_joints = trajectory_.joint_names.size();
   trajectory_length = trajectory_.points.size();
   // Getting the sample time from the trajectory. Probably a more precise method exists
-  trajectory_sample_time = (trajectory_.points[2].time_from_start - trajectory_.points[3].time_from_start).toNSec();
+  trajectory_sample_time = (trajectory_.points[2].time_from_start - trajectory_.points[1].time_from_start).toNSec();
   // 						nsecs:  628257235       dt = 628257236
   // 						nsecs:  926514471       dt = 298257236
   // 	 1 sec		nsecs:  224771706       dt = 298257235
@@ -359,7 +361,8 @@ void  ShyController::trajectoryCallback(
   }
 
   haveTrajectory = true;
-}
+  ROS_INFO("Received a new trajectory with %d waypoints and sample time %d nsecs", trajectory_length, trajectory_sample_time);
+} 
 
 
 }  // namespace franka_example_controllers
