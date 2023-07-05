@@ -72,7 +72,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   int fast_index = -1;
   int slow_index = -1;
   Eigen::Matrix<double, 7, 1> dq_filtered_;
-  Eigen::Matrix<double, 7, 1> q_d, dq_d;      // desired joint position and velocity  
+  Eigen::Matrix<double, 7, 1> q_d, delta_q, dq_d;      // desired joint position and velocity  
   //Eigen::Matrix<double, 7, 1> prev_q_d, prev_dq_d;
   Eigen::Matrix<double, 7, 1> tau_d_calculated;
   Eigen::Matrix<double, 7, 1> tau_d_saturated;

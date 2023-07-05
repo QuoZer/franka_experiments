@@ -210,14 +210,13 @@ void  ShyController::update(const ros::Time& /*time*/,
   if (haveTrajectory) {
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
-
   }
   if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    // time system is not reliable 
   {
     slow_index++;
     fast_index = 0;
-    ROS_ASSERT(trajectory_sample_time > 0);
-    ROS_INFO("Trajectory sample time: %d, ns at point %d", trajectory_sample_time, slow_index);
+    //ROS_ASSERT(trajectory_sample_time > 0);
+    
     //prev_time = pow(10, 9) * trajectory_times(slow_index, 0) + trajectory_times(slow_index, 1);
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
@@ -234,13 +233,19 @@ void  ShyController::update(const ros::Time& /*time*/,
     }
     // update q_d and qd_d
     q_d = deform_trajectory_positions.row(0);
-    dq_d = (deform_trajectory_positions.row(1) - q_d.row(0)) * pow(10, 9) / trajectory_sample_time;   //nsec to sec
+    delta_q = (deform_trajectory_positions.row(1) - deform_trajectory_positions.row(0)); 
+    //ROS_INFO("delta_q values are: %f, %f, %f, %f, %f, %f, %f", delta_q(0), delta_q(1), delta_q(2), delta_q(3), delta_q(4), delta_q(5), delta_q(6));
+    if (trajectory_sample_time == 0 || slow_index == trajectory_length - 1) 
+      dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
+    else 
+      dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
+    //ROS_INFO("dq_d values are: %f, %f, %f, %f, %f, %f, %f", dq_d(0), dq_d(1), dq_d(2), dq_d(3), dq_d(4), dq_d(5), dq_d(6));
     // remove the first row and move data up
     deform_trajectory_positions.block(0, 0, deform_trajectory_positions.rows()-1, deform_trajectory_positions.cols()) = 
         deform_trajectory_positions.block(1, 0, deform_trajectory_positions.rows(), deform_trajectory_positions.cols());
     // add new new waypoint to the end
     deform_trajectory_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
-    // print matrix collumn
+    // TODO: fill with the same stuff after the trajectory is finished
 
     if (slow_index == trajectory_length - 1)
     {
@@ -371,7 +376,7 @@ void  ShyController::trajectoryCallback(
     trajectory_times(i, 0) = trajectory_.points[i].time_from_start.toNSec() - prev_ts;
     prev_ts = trajectory_.points[i].time_from_start.toNSec();
   }
-  trajectory_times(0, 0) = loop_sample_time; // HACK to avoid zero devision in the first iteration  
+  //trajectory_times(0, 0) = loop_sample_time; // HACK to avoid zero devision in the first iteration  
   haveTrajectory = true;
   ROS_INFO("Received a new trajectory with %d waypoints", trajectory_length);
 } 
