@@ -244,8 +244,10 @@ void  ShyController::update(const ros::Time& /*time*/,
     deform_trajectory_positions.block(0, 0, deform_trajectory_positions.rows()-1, deform_trajectory_positions.cols()) = 
         deform_trajectory_positions.block(1, 0, deform_trajectory_positions.rows(), deform_trajectory_positions.cols());
     // add new new waypoint to the end
-    deform_trajectory_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
-    // TODO: fill with the same stuff after the trajectory is finished
+    if (slow_index+trajectory_deformed_length < trajectory_length)
+      deform_trajectory_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
+    else
+      deform_trajectory_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
 
     if (slow_index == trajectory_length - 1)
     {
