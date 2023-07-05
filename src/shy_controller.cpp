@@ -144,10 +144,11 @@ void  ShyController::starting(const ros::Time& /*time*/) {
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
   // convert to eigen
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(initial_state.q.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> dq_initial(initial_state.dq.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> dq_initial(initial_state.dq.data()); //
 
   // set target positions to initial position
   q_d = q_initial;
+  dq_initial.fill(0);
   dq_d = dq_initial;    // zero?
 
   // set nullspace equilibrium configuration to initial q
@@ -186,7 +187,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
 }
 
 void  ShyController::update(const ros::Time& /*time*/,
-                                                 const ros::Duration& /*period*/) {
+                            const ros::Duration& /*period*/) {
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
@@ -206,11 +207,18 @@ void  ShyController::update(const ros::Time& /*time*/,
 
 
   // TRAJECTORY DEFORMATION
-  fast_index++;
-  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)
+  if (haveTrajectory) {
+    fast_index++;
+    trajectory_sample_time = trajectory_times(slow_index+1, 0);
+
+  }
+  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    // time system is not reliable 
   {
     slow_index++;
     fast_index = 0;
+    ROS_ASSERT(trajectory_sample_time > 0);
+    ROS_INFO("Trajectory sample time: %d, ns at point %d", trajectory_sample_time, slow_index);
+    //prev_time = pow(10, 9) * trajectory_times(slow_index, 0) + trajectory_times(slow_index, 1);
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
     // parallize? 
@@ -225,15 +233,15 @@ void  ShyController::update(const ros::Time& /*time*/,
       // Uh(slow_index) = 0;
     }
     // update q_d and qd_d
-    q_d = deform_trajectory_positions.row(slow_index);
-    dq_d = (deform_trajectory_positions.row(slow_index+1) - q_d.row(0)) / trajectory_sample_time * pow(10, 9);
-
+    q_d = deform_trajectory_positions.row(0);
+    dq_d = (deform_trajectory_positions.row(1) - q_d.row(0)) * pow(10, 9) / trajectory_sample_time;   //nsec to sec
     // remove the first row and move data up
     deform_trajectory_positions.block(0, 0, deform_trajectory_positions.rows()-1, deform_trajectory_positions.cols()) = 
-        deform_trajectory_positions.block(1, 0, deform_trajectory_positions.rows()-1, deform_trajectory_positions.cols());
+        deform_trajectory_positions.block(1, 0, deform_trajectory_positions.rows(), deform_trajectory_positions.cols());
     // add new new waypoint to the end
     deform_trajectory_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
-    
+    // print matrix collumn
+
     if (slow_index == trajectory_length - 1)
     {
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index);
@@ -250,13 +258,16 @@ void  ShyController::update(const ros::Time& /*time*/,
                             k_gains_ * (q_d - q) +
                             d_gains_ * (dq_d - dq_filtered_);
       
-  // saturation
+  // saturation to avoid discontinuities
+  // Maximum torque difference with a sampling rate of 1 kHz. The maximum torque rate is
+  // 1000 * (1 / sampling_time).
   tau_d_saturated = saturateTorqueRate(tau_d_calculated, tau_J_d);
-  // ROS_INFO("tau_d_saturated 0 and 6: %f, %f", tau_d_calculated[0], tau_d_calculated[6]);
+  //ROS_INFO("tau_d_saturated 0 and 6: %f, %f", tau_d_calculated[0], tau_d_calculated[6]);
+  
   // cartiesian example has nullspace stiffness as well, skipping for now
 
   for (size_t i = 0; i < 7; ++i) {
-    joint_handles_[i].setCommand(tau_d_calculated[i]);
+    joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
 
 
@@ -333,8 +344,21 @@ void  ShyController::trajectoryCallback(
   trajectory_ = msg->trajectory[0].joint_trajectory;
   num_of_joints = trajectory_.joint_names.size();
   trajectory_length = trajectory_.points.size();
-  // Getting the sample time from the trajectory. Probably a more precise method exists
-  trajectory_sample_time = (trajectory_.points[2].time_from_start - trajectory_.points[1].time_from_start).toNSec();
+  trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_times = Eigen::MatrixXi(trajectory_length, 1); 
+  deform_trajectory_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
+  //deform_trajectory_velocities = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
+  // probably can be done in a more efficient way
+  int prev_ts = 0;
+  for (int i = 0; i < trajectory_length; i++){
+    for (int j = 0; j < num_of_joints; j++){
+      trajectory_positions(i, j) = trajectory_.points[i].positions[j];
+      trajectory_velocities(i, j) = trajectory_.points[i].velocities[j];
+      // also copy the first N waypoints to trajectory_deform
+      if (i < trajectory_deformed_length)
+        deform_trajectory_positions(i, j) = trajectory_.points[i].positions[j];
+    }
   // 						nsecs:  628257235       dt = 628257236
   // 						nsecs:  926514471       dt = 298257236
   // 	 1 sec		nsecs:  224771706       dt = 298257235
@@ -342,26 +366,14 @@ void  ShyController::trajectoryCallback(
   //   ...
   //	 6 sec 		nsecs:  891659179
   //   7 sec 	  nsecs:  519916415       dt = 628257236
-  trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  deform_trajectory_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
-  deform_trajectory_velocities = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
-  for (int i = 0; i < trajectory_length; i++){
-    for (int j = 0; j < num_of_joints; j++){
-      trajectory_positions(i, j) = trajectory_.points[i].positions[j];
-      // also copy the first N waypoints to trajectory_deform
-      if (i < trajectory_deformed_length)
-        deform_trajectory_positions(i, j) = trajectory_.points[i].positions[j];
-    }
+    // 0 | 0 40 | 0 80 | 1 20 | 
+    // 0 | 40 | 40 | 40
+    trajectory_times(i, 0) = trajectory_.points[i].time_from_start.toNSec() - prev_ts;
+    prev_ts = trajectory_.points[i].time_from_start.toNSec();
   }
-  trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  for (int i = 0; i < trajectory_length; i++){
-    for (int j = 0; j < num_of_joints; j++){
-      trajectory_velocities(i, j) = trajectory_.points[i].velocities[j];
-    }
-  }
-
+  trajectory_times(0, 0) = loop_sample_time; // HACK to avoid zero devision in the first iteration  
   haveTrajectory = true;
-  ROS_INFO("Received a new trajectory with %d waypoints and sample time %d nsecs", trajectory_length, trajectory_sample_time);
+  ROS_INFO("Received a new trajectory with %d waypoints", trajectory_length);
 } 
 
 

@@ -48,13 +48,16 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Traject stuff
   bool haveTrajectory = false; 
   std::string robot_model_ = "panda";
+  // trajectory message
   trajectory_msgs::JointTrajectory trajectory_;
-  trajectory_msgs::JointTrajectory trajectory_deformed_;
+  trajectory_msgs::JointTrajectory trajectory_deformed_; // rm
+  // trajectory eigen data
   Eigen::MatrixXd trajectory_positions;
   Eigen::MatrixXd trajectory_velocities;
+  Eigen::MatrixXi trajectory_times;
+  // deformed trajectory eigen data
   Eigen::MatrixXd deform_trajectory_positions;
   Eigen::MatrixXd deform_trajectory_velocities;
-  Eigen::Matrix<double, 7, 1> dq_filtered_;
   int trajectory_sample_time = 0;       // delta, nsec
   int trajectory_deform_time = 0;       // *tau, samples
   int num_of_joints = 7;
@@ -68,6 +71,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::MatrixXd Uh;              // zero Nx1 for u
   int fast_index = -1;
   int slow_index = -1;
+  Eigen::Matrix<double, 7, 1> dq_filtered_;
   Eigen::Matrix<double, 7, 1> q_d, dq_d;      // desired joint position and velocity  
   //Eigen::Matrix<double, 7, 1> prev_q_d, prev_dq_d;
   Eigen::Matrix<double, 7, 1> tau_d_calculated;
