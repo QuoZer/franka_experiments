@@ -39,4 +39,4 @@ shy_controller:
         - 10.0
     coriolis_factor: 1.0
     trajectory_deformed_length: 5
-    admittance: 0
+    admittance: 0.01

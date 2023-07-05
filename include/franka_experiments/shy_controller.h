@@ -18,7 +18,7 @@
 
 #include <moveit_msgs/DisplayTrajectory.h>
 
-#include <franka_example_controllers/compliance_paramConfig.h>
+#include <franka_experiments/compliance_paramConfig.h>
 #include <franka_hw/franka_model_interface.h>
 #include <franka_hw/franka_state_interface.h>
 
@@ -58,8 +58,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // deformed trajectory eigen data
   Eigen::MatrixXd deform_trajectory_positions;
   Eigen::MatrixXd deform_trajectory_velocities;
-  int trajectory_sample_time = 0;       // delta, nsec
-  int trajectory_deform_time = 0;       // *tau, samples
+  int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
   int trajectory_length = 0;            // samples  
   Eigen::MatrixXd A;                    // minimum jerk trajectory model matrix
@@ -79,8 +78,11 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // PARAMETERS`
   Eigen::MatrixXd k_gains_;
   Eigen::MatrixXd d_gains_;
-  int admittance = 0;                   // nu, ???  
-  int trajectory_deformed_length = 0;   // N, samples
+  double admittance = 0;                   // nu  
+  double admittance_target_ = 0;            // nu for dynamic reconf
+  std::mutex admittance_mutex_;
+  int trajectory_deformed_length = 0;      // N, samples
+  int trajectory_deformed_length_target_ = 0; // N for dynamic reconf
   double coriolis_factor_{1.0};
 
   double filter_params_{0.005};
@@ -94,15 +96,14 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::Matrix<double, 7, 1> q_d_nullspace_;
   Eigen::Vector3d position_d_;
   Eigen::Quaterniond orientation_d_;
-  std::mutex position_and_orientation_d_target_mutex_;
   Eigen::Vector3d position_d_target_;
   Eigen::Quaterniond orientation_d_target_;
 
   // Dynamic reconfigure
-  std::unique_ptr<dynamic_reconfigure::Server<franka_example_controllers::compliance_paramConfig>>
+  std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
-  void complianceParamCallback(franka_example_controllers::compliance_paramConfig& config,
+  void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
 
   // Equilibrium pose subscriber

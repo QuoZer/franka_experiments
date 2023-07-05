@@ -111,10 +111,9 @@ list_insert_in_workspace_order(catkin_INCLUDE_DIRS ${Franka_INCLUDE_DIRS} ${catk
 ##     and list every .cfg file to be processed
 
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
+ generate_dynamic_reconfigure_options(
+   cfg/compliance_param.cfg
+ )
 
 ###################################
 ## catkin specific configuration ##
@@ -175,7 +174,7 @@ add_dependencies(franka_experiments
   ${catkin_EXPORTED_TARGETS}
   # ${PROJECT_NAME}_generate_messages_cpp
   # ${PROJECT_NAME}_gencpp
-  # ${PROJECT_NAME}_gencfg
+  ${PROJECT_NAME}_gencfg
 )
 
 target_link_libraries(franka_experiments PUBLIC
