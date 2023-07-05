@@ -170,6 +170,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   // Fill the diagonal below 3 with -1
   A.diagonal(-3).setConstant(-1);
 
+
   R = A.transpose() * A;
 
   B = Eigen::MatrixXd::Zero(4, N);
@@ -182,6 +183,12 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
   H = std::sqrt(N) * G / G.norm();    // check if norm is correct
+  // Alternative deformation matrix
+  // H = Eigen::MatrixXd::Zero(N, N);
+  // H.diagonal(0).setConstant(1);
+  // H.diagonal(-1).setConstant(1);
+  // H.diagonal(1).setConstant(1);
+  // H = H.inverse();
   ROS_INFO("Finished precompute");
 
 }
@@ -277,9 +284,7 @@ void  ShyController::update(const ros::Time& /*time*/,
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
 
-
-
-  // update parameters changed online either through dynamic reconfigure 
+  // update parameters changed online through dynamic reconfigure 
   admittance = admittance_target_;
 }
 
