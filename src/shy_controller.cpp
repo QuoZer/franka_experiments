@@ -149,7 +149,8 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   // set target positions to initial position
   q_d = q_initial;
   dq_initial.fill(0);
-  dq_d = dq_initial;    // zero?
+  dq_d = dq_initial;    // zero
+  delta_q = dq_initial;
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
@@ -182,13 +183,13 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
   G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
-  // H = std::sqrt(N) * G / G.norm();    // check if norm is correct
-  // Alternative deformation matrix
-  H = Eigen::MatrixXd::Zero(N, N);
-  H.diagonal(0).setConstant(1);
-  H.diagonal(-1).setConstant(1);
-  H.diagonal(1).setConstant(1);
-  H = H.inverse();
+  H = std::sqrt(N) * G / G.norm();    // check if norm is correct
+  // // Alternative deformation matrix
+  // H = Eigen::MatrixXd::Zero(N, N);
+  // H.diagonal(0).setConstant(1);
+  // H.diagonal(-1).setConstant(1);
+  // H.diagonal(1).setConstant(1);
+  // H = H.inverse();
   ROS_INFO("Finished precompute");
 
 }
@@ -208,10 +209,6 @@ void  ShyController::update(const ros::Time& /*time*/,
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(  // NOLINT (readability-identifier-naming)
       robot_state.tau_J_d.data());
-  Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
-  Eigen::Vector3d position(transform.translation());
-  Eigen::Quaterniond orientation(transform.rotation());
-
 
   // TRAJECTORY DEFORMATION
   if (haveTrajectory) {
@@ -228,24 +225,24 @@ void  ShyController::update(const ros::Time& /*time*/,
     for (int dim = 0; dim < 7; dim++)
     {
       // calculate deformation for each joint separetely
-      Uh(slow_index) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
-      // Nx1 = Nx1 + 1x1 * NxN * Nx1
-      trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * Uh;
-      ROS_ASSERT(trajectory_frame_positions.rows() == trajectory_deformation_.rows());
-      trajectory_frame_positions.col(dim) += trajectory_deformation_;
-      Uh(slow_index) = 0;
+      // Uh(slow_index) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
+      // // Nx1 = Nx1 + 1x1 * NxN * Nx1
+      // trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * Uh;
+      // ROS_ASSERT(trajectory_frame_positions.rows() == trajectory_deformation_.rows());
+      // trajectory_frame_positions.col(dim) += trajectory_deformation_;
+      // Uh(slow_index) = 0;
       // Nx1 = Nx1 + 1x1 * Nx1 * 1x1
-      //deform_trajectory_positions.col(dim) = deform_trajectory_positions.col(dim) + admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
+      trajectory_frame_positions.col(dim) = trajectory_frame_positions.col(dim) ;//+ admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
     }
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
-    
-    if (trajectory_sample_time == 0 || slow_index == trajectory_length - 1) 
+    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0)); 
+    //ROS_INFO("q_d: %f %f %f %f %f %f %f", q_d(0), q_d(1), q_d(2), q_d(3), q_d(4), q_d(5), q_d(6));
+    if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
-      delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0)); 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
-    
+
     // remove the first row and move data up
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
@@ -254,7 +251,11 @@ void  ShyController::update(const ros::Time& /*time*/,
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
     else
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
-
+    // sanity check
+    ROS_ASSERT(trajectory_frame_positions.allFinite());
+    ROS_ASSERT(q_d.allFinite());
+    ROS_ASSERT(dq_d.allFinite());
+    
     if (slow_index == trajectory_length - 1)
     {
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index);
@@ -339,6 +340,8 @@ void  ShyController::trajectoryCallback(
       if (i < trajectory_deformed_length)
         trajectory_frame_positions(i, j) = trajectory_.points[i].positions[j];
     }
+    trajectory_times(i, 0) = trajectory_.points[i].time_from_start.toNSec() - prev_ts;
+    prev_ts = trajectory_.points[i].time_from_start.toNSec();
   // 						nsecs:  628257235       dt = 628257236
   // 						nsecs:  926514471       dt = 298257236
   // 	 1 sec		nsecs:  224771706       dt = 298257235
@@ -348,12 +351,10 @@ void  ShyController::trajectoryCallback(
   //   7 sec 	  nsecs:  519916415       dt = 628257236
     // 0 | 0 40 | 0 80 | 1 20 | 
     // 0 | 40 | 40 | 40
-    trajectory_times(i, 0) = trajectory_.points[i].time_from_start.toNSec() - prev_ts;
-    prev_ts = trajectory_.points[i].time_from_start.toNSec();
   }
   //trajectory_times(0, 0) = loop_sample_time; // HACK to avoid zero devision in the first iteration  
   haveTrajectory = true;
-  ROS_INFO("Received a new trajectory with %d waypoints", trajectory_length);
+  ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d", trajectory_length, trajectory_deformed_length);
 } 
 
 
