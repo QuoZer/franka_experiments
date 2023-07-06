@@ -105,7 +105,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
-
+  void precompute();
   // Equilibrium pose subscriber
 //   ros::Subscriber sub_equilibrium_pose_;
   ros::Subscriber sub_trajectory_;
