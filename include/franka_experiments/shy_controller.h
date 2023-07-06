@@ -56,8 +56,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::MatrixXd trajectory_velocities;
   Eigen::MatrixXi trajectory_times;
   // deformed trajectory eigen data
-  Eigen::MatrixXd deform_trajectory_positions;
-  Eigen::MatrixXd deform_trajectory_velocities;
+  Eigen::MatrixXd trajectory_frame_positions;
+  Eigen::MatrixXd trajectory_deformation_;
   int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
   int trajectory_length = 0;            // samples  
