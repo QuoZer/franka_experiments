@@ -13,6 +13,8 @@
 
 #include <franka_experiments/pseudo_inversion.h>
 
+#define ALT_METHOD
+
 namespace franka_example_controllers {
 
 bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
@@ -161,35 +163,39 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   Uh = Eigen::MatrixXd::Zero(N, 1);
   dq_filtered_.fill(0);   // init with zeros
   // minimum jerk trajectory model matrix
-  A = Eigen::MatrixXd::Zero(N + 3, N);
-  // Fill diagonal with 1s
-  A.diagonal(0).setConstant(1);
-  // Fill the diagonal below it with -3
-  A.diagonal(-1).setConstant(-3);
-  // Fill the diagonal below -3 with 3
-  A.diagonal(-2).setConstant(3);
-  // Fill the diagonal below 3 with -1
-  A.diagonal(-3).setConstant(-1);
+  // A = Eigen::MatrixXd::Zero(N + 3, N);
+  // // Fill diagonal with 1s
+  // A.diagonal(0).setConstant(1);
+  // // Fill the diagonal below it with -3
+  // A.diagonal(-1).setConstant(-3);
+  // // Fill the diagonal below -3 with 3
+  // A.diagonal(-2).setConstant(3);
+  // // Fill the diagonal below 3 with -1
+  // A.diagonal(-3).setConstant(-1);
 
 
-  R = A.transpose() * A;
+  //R = A.transpose() * A;
 
-  B = Eigen::MatrixXd::Zero(4, N);
-  B(0, 0) = 1;
-  B(1, 1) = 1;
-  B(2, N - 2) = 1;
-  B(3, N - 1) = 1;
+  //B = Eigen::MatrixXd::Zero(4, N);
+  //B(0, 0) = 1;
+  //B(1, 1) = 1;
+  //B(2, N - 2) = 1;
+  //B(3, N - 1) = 1;
 
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
-  G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
+  //G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
-  H = std::sqrt(N) * G / G.norm();    // check if norm is correct
-  // // Alternative deformation matrix
-  // H = Eigen::MatrixXd::Zero(N, N);
-  // H.diagonal(0).setConstant(1);
-  // H.diagonal(-1).setConstant(1);
-  // H.diagonal(1).setConstant(1);
-  // H = H.inverse();
+  // H = std::sqrt(N) * G / G.norm();    // check if norm is correct
+  // Alternative deformation matrix
+  A = Eigen::MatrixXd::Zero(N+2, N);
+  A.diagonal(0).setConstant(1);
+  A.diagonal(1).setConstant(-2);
+  A.diagonal(2).setConstant(1);
+  R = A.transpose() * A;
+  //ROS_INFO("H generated: %f %f %f %f %f", H(0,0), H(1,0), H(2,0), H(3,0), H(4,0));
+  H = R.inverse();
+  ROS_INFO("H ivertedted: %f %f %f %f %f", H(0,0), H(1,0), H(2,0), H(3,0), H(4,0));
+  
   ROS_INFO("Finished precompute");
 
 }
@@ -221,22 +227,26 @@ void  ShyController::update(const ros::Time& /*time*/,
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
+    ROS_INFO("admittance: %f, uh contents: %f %f %f %f %f ", admittance, uh(0), uh(1), uh(2), uh(3), uh(4));
     // parallize/vectorize? 
     for (int dim = 0; dim < 7; dim++)
     {
       // calculate deformation for each joint separetely
-      // Uh(slow_index) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
-      // // Nx1 = Nx1 + 1x1 * NxN * Nx1
-      // trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * Uh;
-      // ROS_ASSERT(trajectory_frame_positions.rows() == trajectory_deformation_.rows());
-      // trajectory_frame_positions.col(dim) += trajectory_deformation_;
-      // Uh(slow_index) = 0;
+      Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
+      // Nx1 = Nx1 + 1x1 * NxN * Nx1
+      trajectory_deformation_ = admittance * H * Uh;
+      ROS_INFO("dim %d trajectory_deformation: %f %f %f %f %f",  dim,
+                trajectory_deformation_(0), trajectory_deformation_(1), trajectory_deformation_(2), trajectory_deformation_(3), trajectory_deformation_(4));
+      ROS_ASSERT(trajectory_deformation_.allFinite());
+      assert(trajectory_deformation_.allFinite());
+      trajectory_frame_positions.col(dim) += trajectory_deformation_.col(0);
+      Uh(0) = 0;
       // Nx1 = Nx1 + 1x1 * Nx1 * 1x1
-      trajectory_frame_positions.col(dim) = trajectory_frame_positions.col(dim) ;//+ admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
+      // trajectory_frame_positions.col(dim) = trajectory_frame_positions.col(dim) + admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
     }
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
-    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0)); 
+    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
     //ROS_INFO("q_d: %f %f %f %f %f %f %f", q_d(0), q_d(1), q_d(2), q_d(3), q_d(4), q_d(5), q_d(6));
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
@@ -324,6 +334,7 @@ void  ShyController::trajectoryCallback(
   num_of_joints = trajectory_.joint_names.size();
   trajectory_length = trajectory_.points.size();
   trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
