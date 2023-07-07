@@ -86,9 +86,10 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   double coriolis_factor_{1.0};
 
   double filter_params_{0.005};
+  const double delta_tau_max_{1.0};
+  // not really needed anymoer
   double nullspace_stiffness_{20.0};
   double nullspace_stiffness_target_{20.0};
-  const double delta_tau_max_{1.0};
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
   Eigen::Matrix<double, 6, 6> cartesian_damping_;

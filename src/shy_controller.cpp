@@ -13,7 +13,7 @@
 
 #include <franka_experiments/pseudo_inversion.h>
 
-#define ALT_METHOD
+//#define ALT_METHOD
 
 namespace franka_example_controllers {
 
@@ -130,8 +130,6 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
 }
 
 void  ShyController::starting(const ros::Time& /*time*/) {
-  // compute initial velocity with jacobian and set x_attractor and q_d_nullspace
-  // to initial configuration
   franka::RobotState initial_state = state_handle_->getRobotState();
   // get jacobian
   std::array<double, 42> jacobian_array =
@@ -148,6 +146,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
+
   
   precompute();
 
@@ -184,7 +183,7 @@ void ShyController::precompute()
     A.diagonal(-3).setConstant(-1);
     
     R = A.transpose() * A;
-
+    // Ensures that the first two and the last two points are the same as in the original trajectory
     B = Eigen::MatrixXd::Zero(4, N);
     B(0, 0) = 1;
     B(1, 1) = 1;
@@ -193,7 +192,7 @@ void ShyController::precompute()
 
     G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
-    H = std::sqrt(N) * G / G.norm();    // check if norm is correct
+    H = std::sqrt(N) * G / G.norm();    
 
   #endif
   ROS_INFO("Finished precompute");
@@ -226,7 +225,7 @@ void  ShyController::update(const ros::Time& /*time*/,
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
-    ROS_INFO("admittance: %f, uh contents: %f %f %f %f %f ", admittance, uh(0), uh(1), uh(2), uh(3), uh(4));
+    // ROS_INFO("admittance: %f, uh contents: %f %f %f %f %f ", admittance, uh(0), uh(1), uh(2), uh(3), uh(4));
     // parallize/vectorize? 
     for (int dim = 0; dim < 7; dim++)
     {
@@ -234,18 +233,18 @@ void  ShyController::update(const ros::Time& /*time*/,
       #ifdef ALT_METHOD
         Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
         // Nx1 = Nx1 + 1x1 * NxN * Nx1
-        trajectory_deformation_ = admittance * H * Uh;
-        ROS_INFO("dim %d trajectory_deformation: %f %f %f %f %f",  dim,
-                  trajectory_deformation_(0), trajectory_deformation_(1), trajectory_deformation_(2), trajectory_deformation_(3), trajectory_deformation_(4));
-        ROS_ASSERT(trajectory_deformation_.allFinite());    // doesn't seem to work 
-        assert(trajectory_deformation_.allFinite());
-        trajectory_frame_positions.col(dim) += trajectory_deformation_.col(0);
+        trajectory_deformation_.col(dim) = admittance * H * Uh;
+        // ROS_INFO("dim %d trajectory_deformation: %f %f %f %f %f",  dim,
+        //           trajectory_deformation_(0), trajectory_deformation_(1), trajectory_deformation_(2), trajectory_deformation_(3), trajectory_deformation_(4));
         Uh(0) = 0;
       #else
         //  Nx1 = Nx1 + 1x1 * Nx1 * 1x1
-        trajectory_frame_positions.col(dim) = trajectory_frame_positions.col(dim) + admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
+        trajectory_deformation_.col(dim) = admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
+        trajectory_frame_positions.col(dim) += trajectory_deformation_.col(dim);
       #endif
     }
+    ROS_ASSERT(trajectory_deformation_.allFinite());    // doesn't seem to work 
+    assert(trajectory_deformation_.allFinite());
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
     delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
@@ -263,20 +262,22 @@ void  ShyController::update(const ros::Time& /*time*/,
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
     else
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
-    // sanity check
-    ROS_ASSERT(trajectory_frame_positions.allFinite());
-    ROS_ASSERT(q_d.allFinite());
-    ROS_ASSERT(dq_d.allFinite());
     
+      
     if (slow_index == trajectory_length - 1)
     {
-      ROS_INFO("Trajectory execution finished after %d waypoints", slow_index);
+      ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
       slow_index = 0;
       haveTrajectory = false;
     }
   }
+  // sanity check
+  if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
+  {
+    throw std::runtime_error("Trajectory positions, q_d or dq_d is not finite");
+  }
 
-  // honestly, don't know what this is for (from joint impedance example)
+  // from joint impedance example
   double alpha = 0.99;
   dq_filtered_ = (1 - alpha) * dq_filtered_ + alpha * dq;
   // impedance control
@@ -288,7 +289,6 @@ void  ShyController::update(const ros::Time& /*time*/,
   // Maximum torque difference with a sampling rate of 1 kHz. The maximum torque rate is
   // 1000 * (1 / sampling_time).
   tau_d_saturated = saturateTorqueRate(tau_d_calculated, tau_J_d);
-  //ROS_INFO("tau_d_saturated 0 and 6: %f, %f", tau_d_calculated[0], tau_d_calculated[6]);
   
   // cartiesian example has nullspace stiffness as well, skipping for now
 
@@ -297,6 +297,7 @@ void  ShyController::update(const ros::Time& /*time*/,
   }
 
   // update parameters changed online through dynamic reconfigure 
+  std::lock_guard<std::mutex> lock(admittance_mutex_);
   admittance = admittance_target_;
 }
 
@@ -315,6 +316,7 @@ Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
 void  ShyController::complianceParamCallback(
     franka_experiments::compliance_paramConfig& config,
     uint32_t /*level*/) {
+  std::lock_guard<std::mutex> lock(admittance_mutex_);
   admittance_target_ = config.admittance;
   trajectory_deformed_length_target_ = config.deformed_length;
 }
@@ -334,6 +336,7 @@ void  ShyController::trajectoryCallback(
   trajectory_ = msg->trajectory[0].joint_trajectory;
   num_of_joints = trajectory_.joint_names.size();
   trajectory_length = trajectory_.points.size();
+  // Convert to eigen
   trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
@@ -345,7 +348,7 @@ void  ShyController::trajectoryCallback(
   }
     
   trajectory_frame_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
-  //deform_trajectory_velocities = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
+  
   // probably can be done in a more efficient way
   int prev_ts = 0;
   for (int i = 0; i < trajectory_length; i++){
