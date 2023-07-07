@@ -348,7 +348,7 @@ void  ShyController::trajectoryCallback(
   }
     
   trajectory_frame_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
-  
+  int time_scaling_factor = 4;    // HACK to reduce velocity
   // probably can be done in a more efficient way
   int prev_ts = 0;
   for (int i = 0; i < trajectory_length; i++){
@@ -359,7 +359,7 @@ void  ShyController::trajectoryCallback(
       if (i < trajectory_deformed_length)
         trajectory_frame_positions(i, j) = trajectory_.points[i].positions[j];
     }
-    trajectory_times(i, 0) = trajectory_.points[i].time_from_start.toNSec() - prev_ts;
+    trajectory_times(i, 0) = time_scaling_factor*(trajectory_.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = trajectory_.points[i].time_from_start.toNSec();
   // 						nsecs:  628257235       dt = 628257236
   // 						nsecs:  926514471       dt = 298257236
