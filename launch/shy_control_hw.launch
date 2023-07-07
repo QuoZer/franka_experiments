@@ -7,6 +7,7 @@
   <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true"/>
 
   <rosparam command="load" file="$(find franka_experiments)/config/franka_example_controllers.yaml" subst_value="true" />
+  <remap to="move_group/display_planned_path" from="shy_controller/move_group/display_planned_path" />
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="shy_controller"/>
   
   <node pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find franka_example_controllers)/launch/rviz/franka_description_with_marker.rviz -f $(arg arm_id)_link0 --splash-screen $(find franka_visualization)/splash.png"/>
