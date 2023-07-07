@@ -239,12 +239,12 @@ void  ShyController::update(const ros::Time& /*time*/,
         Uh(0) = 0;
       #else
         //  Nx1 = Nx1 + 1x1 * Nx1 * 1x1
-        trajectory_deformation_.col(dim) = admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
-        trajectory_frame_positions.col(dim) += trajectory_deformation_.col(dim);
+        //trajectory_deformation_.col(dim) = admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
+        //trajectory_frame_positions.col(dim) += trajectory_deformation_.col(dim);
       #endif
     }
-    ROS_ASSERT(trajectory_deformation_.allFinite());    // doesn't seem to work 
-    assert(trajectory_deformation_.allFinite());
+    trajectory_frame_positions += admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+    
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
     delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
@@ -373,7 +373,8 @@ void  ShyController::trajectoryCallback(
   }
   
   haveTrajectory = true;
-  ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d", trajectory_length, trajectory_deformed_length);
+  ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
+                 trajectory_length, trajectory_deformed_length, admittance);
 } 
 
 
