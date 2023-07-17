@@ -13,7 +13,8 @@
 
 #include <franka_experiments/pseudo_inversion.h>
 
-#define ALT_METHOD
+// The other method works better
+//#define ALT_METHOD
 
 namespace franka_example_controllers {
 
@@ -146,7 +147,6 @@ void  ShyController::starting(const ros::Time& /*time*/) {
 
   // set nullspace equilibrium configuration to initial q
   q_d_nullspace_ = q_initial;
-
   
   precompute();
 
@@ -225,27 +225,32 @@ void  ShyController::update(const ros::Time& /*time*/,
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
-    // ROS_INFO("admittance: %f, uh contents: %f %f %f %f %f ", admittance, uh(0), uh(1), uh(2), uh(3), uh(4));
-
+    
     #ifdef ALT_METHOD
-      Uh.row(0) = uh;   // Uh = (uh at the current time step | 0 at the rest)
-      // Nx7 = Nx7 + 1x1 * NxN * Nx7
-      trajectory_frame_positions += admittance * H * Uh;
+      // parallize/vectorize? 
+      for (int dim = 0; dim < 7; dim++)
+      // calculate deformation for each joint separetely
+      {
+          Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
+          // Nx1 = Nx1 + 1x1 * NxN * Nx1
+          trajectory_deformation_ = admittance * H * Uh;
+      }
     #else
-      // Nx7 = Nx7 + 1x1 * Nx7 * 7x1
-      trajectory_frame_positions += admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+      // Nx7 = Nx7 + 1x1 * Nx1 * 1x7
+      trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
     #endif
+    trajectory_frame_positions += trajectory_deformation_;
     
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
-    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
     
+    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
-    // remove the first row and move data up
+    // remove the first row and move the rest up
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
     // add new new waypoint to the end
@@ -254,7 +259,7 @@ void  ShyController::update(const ros::Time& /*time*/,
     else
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
     
-      
+    // termination
     if (slow_index == trajectory_length - 1)
     {
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
@@ -262,6 +267,7 @@ void  ShyController::update(const ros::Time& /*time*/,
       haveTrajectory = false;
     }
   }
+  
   // sanity check
   if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
   {
