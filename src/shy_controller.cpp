@@ -237,19 +237,20 @@ void  ShyController::update(const ros::Time& /*time*/,
       }
     #else
       // Nx7 = Nx7 + 1x1 * Nx1 * 1x7
-      trajectory_frame_positions += admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+      trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
     #endif
+    trajectory_frame_positions += trajectory_deformation_;
     
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
-    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
     
+    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
-    // remove the first row and move data up
+    // remove the first row and move the rest up
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
     // add new new waypoint to the end
