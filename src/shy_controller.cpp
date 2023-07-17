@@ -227,16 +227,11 @@ void  ShyController::update(const ros::Time& /*time*/,
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
     
     #ifdef ALT_METHOD
-      // parallize/vectorize? 
-      for (int dim = 0; dim < 7; dim++)
-      // calculate deformation for each joint separetely
-      {
-          Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
-          // Nx1 = Nx1 + 1x1 * NxN * Nx1
-          trajectory_deformation_ = admittance * H * Uh;
-      }
+      Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
+      // Nx7 = 1x1 * NxN * Nx7
+      trajectory_deformation_ = admittance * H * Uh;
     #else
-      // Nx7 = Nx7 + 1x1 * Nx1 * 1x7
+      // Nx7 = 1x1 * Nx1 * 1x7
       trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
     #endif
     trajectory_frame_positions += trajectory_deformation_;
