@@ -13,7 +13,7 @@
 
 #include <franka_experiments/pseudo_inversion.h>
 
-//#define ALT_METHOD
+#define ALT_METHOD
 
 namespace franka_example_controllers {
 
@@ -157,7 +157,7 @@ void ShyController::precompute()
   // Deformations precompute
   int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
-  Uh = Eigen::MatrixXd::Zero(N, 1);
+  Uh = Eigen::MatrixXd::Zero(N, 7);
   dq_filtered_.fill(0);   // init with zeros
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
 
@@ -226,24 +226,15 @@ void  ShyController::update(const ros::Time& /*time*/,
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
     // ROS_INFO("admittance: %f, uh contents: %f %f %f %f %f ", admittance, uh(0), uh(1), uh(2), uh(3), uh(4));
-    // parallize/vectorize? 
-    for (int dim = 0; dim < 7; dim++)
-    {
-      // calculate deformation for each joint separetely
-      #ifdef ALT_METHOD
-        Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
-        // Nx1 = Nx1 + 1x1 * NxN * Nx1
-        trajectory_deformation_.col(dim) = admittance * H * Uh;
-        // ROS_INFO("dim %d trajectory_deformation: %f %f %f %f %f",  dim,
-        //           trajectory_deformation_(0), trajectory_deformation_(1), trajectory_deformation_(2), trajectory_deformation_(3), trajectory_deformation_(4));
-        Uh(0) = 0;
-      #else
-        //  Nx1 = Nx1 + 1x1 * Nx1 * 1x1
-        //trajectory_deformation_.col(dim) = admittance * trajectory_sample_time/pow(10, 9) * H * uh(dim);
-        //trajectory_frame_positions.col(dim) += trajectory_deformation_.col(dim);
-      #endif
-    }
-    trajectory_frame_positions += admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+
+    #ifdef ALT_METHOD
+      Uh.row(0) = uh;   // Uh = (uh at the current time step | 0 at the rest)
+      // Nx7 = Nx7 + 1x1 * NxN * Nx7
+      trajectory_frame_positions += admittance * H * Uh;
+    #else
+      // Nx7 = Nx7 + 1x1 * Nx7 * 7x1
+      trajectory_frame_positions += admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+    #endif
     
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
@@ -348,7 +339,7 @@ void  ShyController::trajectoryCallback(
   }
     
   trajectory_frame_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
-  int time_scaling_factor = 4;    // HACK to reduce velocity
+  
   // probably can be done in a more efficient way
   int prev_ts = 0;
   for (int i = 0; i < trajectory_length; i++){
