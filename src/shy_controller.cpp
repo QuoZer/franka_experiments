@@ -259,7 +259,7 @@ void  ShyController::update(const ros::Time& /*time*/,
     else
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
     
-      
+    // termination
     if (slow_index == trajectory_length - 1)
     {
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
@@ -267,6 +267,7 @@ void  ShyController::update(const ros::Time& /*time*/,
       haveTrajectory = false;
     }
   }
+  
   // sanity check
   if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
   {
