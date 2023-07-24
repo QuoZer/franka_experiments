@@ -265,12 +265,18 @@ void  ShyController::update(const ros::Time& /*time*/,
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
     
     // termination
+    RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
     if (slow_index == trajectory_length - 1)
     {
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
       slow_index = 0;
       haveTrajectory = false;
+      current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
+      current_active_goal->setSucceeded(current_active_goal->preallocated_result_);
+      current_active_goal.reset(); // do not publish feedback
+      rt_active_goal_.reset();
     }
+
   }
   
   // sanity check
@@ -323,22 +329,11 @@ void  ShyController::complianceParamCallback(
   trajectory_deformed_length_target_ = config.deformed_length;
 }
 
-void  ShyController::trajectoryCallback(
-    const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
-
-  if (haveTrajectory){
-    ROS_WARN("Received a new trajectory while the old one is still being executed. Ignoring the new trajectory");
-    return;
-  }
-
-  if (!msg->model_id.empty() && msg->model_id != robot_model_)
-    ROS_WARN("Received a trajectory to display for model '%s' but model '%s' was expected", msg->model_id.c_str(), robot_model_.c_str());
-
-  // Save the trajectory
-  trajectory_ = msg->trajectory[0].joint_trajectory;
-  num_of_joints = trajectory_.joint_names.size();
-  trajectory_length = trajectory_.points.size();
-  // Convert to eigen
+void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj)
+{
+  num_of_joints = traj.joint_names.size();
+  trajectory_length = traj.points.size();
+    // Convert to eigen
   trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
@@ -355,29 +350,103 @@ void  ShyController::trajectoryCallback(
   int prev_ts = 0;
   for (int i = 0; i < trajectory_length; i++){
     for (int j = 0; j < num_of_joints; j++){
-      trajectory_positions(i, j) = trajectory_.points[i].positions[j];
-      trajectory_velocities(i, j) = trajectory_.points[i].velocities[j];
+      trajectory_positions(i, j) = traj.points[i].positions[j];
+      trajectory_velocities(i, j) = traj.points[i].velocities[j];
       // also copy the first N waypoints to trajectory_deform
       if (i < trajectory_deformed_length)
-        trajectory_frame_positions(i, j) = trajectory_.points[i].positions[j];
+        trajectory_frame_positions(i, j) = traj.points[i].positions[j];
     }
-    trajectory_times(i, 0) = time_scaling_factor*(trajectory_.points[i].time_from_start.toNSec() - prev_ts);
-    prev_ts = trajectory_.points[i].time_from_start.toNSec();
-  // 						nsecs:  628257235       dt = 628257236
-  // 						nsecs:  926514471       dt = 298257236
-  // 	 1 sec		nsecs:  224771706       dt = 298257235
-  //   1 sec 		nsecs:  523028942       dt = 298257236
-  //   ...
-  //	 6 sec 		nsecs:  891659179
-  //   7 sec 	  nsecs:  519916415       dt = 628257236
-    // 0 | 0 40 | 0 80 | 1 20 | 
-    // 0 | 40 | 40 | 40
+    trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
+    prev_ts = traj.points[i].time_from_start.toNSec();
   }
+}
+
+void  ShyController::trajectoryCallback(
+    const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
+
+  if (haveTrajectory){
+    ROS_WARN("Received a new trajectory while the old one is still being executed. Ignoring the new trajectory");
+    return;
+  }
+
+  if (!msg->model_id.empty() && msg->model_id != robot_model_)
+    ROS_WARN("Received a trajectory to display for model '%s' but model '%s' was expected", msg->model_id.c_str(), robot_model_.c_str());
+
+  // TODO: ParseTrajectory
+  trajectory_ = msg->trajectory[0].joint_trajectory;
+  parseTrajectory(trajectory_);    
   
   haveTrajectory = true;
   ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
                  trajectory_length, trajectory_deformed_length, admittance);
 } 
+
+/*
+  Update goal trajectory with action interface 
+*/
+void ShyController::goalCB(GoalHandle gh)
+{
+  // Precondition: 
+  if (haveTrajectory){
+    ROS_WARN("Received a new trajectory while the old one is still being executed. Ignoring the new trajectory");
+    return;
+  }
+
+  // Try to update new trajectory
+  RealtimeGoalHandlePtr rt_goal(new RealtimeGoalHandle(gh));
+  trajectory_ = gh.getGoal()->trajectory;
+
+  parseTrajectory(trajectory_);
+
+  preemptActiveGoal();
+  gh.setAccepted();
+  rt_active_goal_ = rt_goal;
+
+    // Setup goal status checking timer
+    // goal_handle_timer_ = controller_nh_.createTimer(action_monitor_period_,
+    //                                                 &RealtimeGoalHandle::runNonRealtime,
+    //                                                 rt_goal);
+    // goal_handle_timer_.start();
+
+}
+
+/*
+  Cancel current trajectory with action interface
+*/
+void ShyController::cancelCB(GoalHandle gh)
+{
+  RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
+
+  // Check that cancel request refers to currently active goal (if any)
+  if (current_active_goal && current_active_goal->gh_ == gh)
+  {
+    // Reset current goal
+    rt_active_goal_.reset();
+
+    // Controller uptime
+    //const ros::Time uptime = time_data_.readFromRT()->uptime;
+
+    // Enter hold current position mode
+    //setHoldPosition(uptime);
+    ROS_INFO("Canceling active action goal because cancel callback recieved from actionlib.");
+
+    // Mark the current goal as canceled
+    current_active_goal->gh_.setCanceled();
+  }
+}
+
+inline void ShyController::preemptActiveGoal()
+{
+  RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
+
+  // Cancels the currently active goal
+  if (current_active_goal)
+  {
+    // Marks the current goal as canceled
+    rt_active_goal_.reset();
+    current_active_goal->gh_.setCanceled();
+  }
+}
 
 
 }  // namespace franka_example_controllers

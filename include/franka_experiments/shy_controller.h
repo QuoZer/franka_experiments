@@ -26,6 +26,7 @@
 #include <realtime_tools/realtime_box.h>
 #include <realtime_tools/realtime_buffer.h>
 #include <realtime_tools/realtime_publisher.h>
+#include <realtime_tools/realtime_server_goal_handle.h>
 
 // actionlib
 #include <actionlib/server/action_server.h>
@@ -47,23 +48,27 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void update(const ros::Time&, const ros::Duration& period) override;
 
  private:
+
+  typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
+  typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
+  typedef ActionServer::GoalHandle                                                            GoalHandle;
+  typedef trajectory_msgs::JointTrajectory::ConstPtr                                          JointTrajectoryConstPtr;
+  typedef realtime_tools::RealtimeServerGoalHandle<control_msgs::FollowJointTrajectoryAction> RealtimeGoalHandle;
+  typedef boost::shared_ptr<RealtimeGoalHandle>                                               RealtimeGoalHandlePtr;
+  typedef realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>     StatePublisher;
+  typedef std::unique_ptr<StatePublisher>                                                     StatePublisherPtr;
+
   void initTrajectDeformation();
+  void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
+
   // Saturation
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
       const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
 
   // Trajectory action stuff 
-  typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
-  typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
-  typedef ActionServer::GoalHandle                                                            GoalHandle;
-  typedef trajectory_msgs::JointTrajectory::ConstPtr                                          JointTrajectoryConstPtr;
-  //typedef realtime_tools::RealtimeServerGoalHandle<control_msgs::FollowJointTrajectoryAction> RealtimeGoalHandle;
-  //typedef boost::shared_ptr<RealtimeGoalHandle>                                               RealtimeGoalHandlePtr;
-  typedef realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>     StatePublisher;
-  typedef std::unique_ptr<StatePublisher>                                                     StatePublisherPtr;
-
   ActionServerPtr    action_server_;
+  RealtimeGoalHandlePtr     rt_active_goal_;     ///< Currently active action goal, if any.
 
   //virtual bool updateTrajectoryCommand(const JointTrajectoryConstPtr& msg, RealtimeGoalHandlePtr gh, std::string* error_string = nullptr);
   virtual void trajectoryCommandCB(const JointTrajectoryConstPtr& msg);
@@ -83,6 +88,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::string robot_model_ = "panda";
   // trajectory message
   trajectory_msgs::JointTrajectory trajectory_;
+  JointTrajectoryConstPtr trajectory_ptr_;
   trajectory_msgs::JointTrajectory trajectory_deformed_; // rm
   // trajectory eigen data
   Eigen::MatrixXd trajectory_positions;
