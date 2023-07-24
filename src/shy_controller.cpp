@@ -359,6 +359,9 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = traj.points[i].time_from_start.toNSec();
   }
+
+  ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
+                 trajectory_length, trajectory_deformed_length, admittance);
 }
 
 void  ShyController::trajectoryCallback(
@@ -377,8 +380,7 @@ void  ShyController::trajectoryCallback(
   parseTrajectory(trajectory_);    
   
   haveTrajectory = true;
-  ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
-                 trajectory_length, trajectory_deformed_length, admittance);
+  
 } 
 
 /*
@@ -401,6 +403,7 @@ void ShyController::goalCB(GoalHandle gh)
   preemptActiveGoal();
   gh.setAccepted();
   rt_active_goal_ = rt_goal;
+  haveTrajectory = true;
 
     // Setup goal status checking timer
     // goal_handle_timer_ = controller_nh_.createTimer(action_monitor_period_,

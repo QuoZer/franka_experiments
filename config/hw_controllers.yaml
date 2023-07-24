@@ -1,7 +1,7 @@
 controller_list:
- - name: panda_shy_controller
+ - name: panda_arm_controller
    action_ns: follow_joint_trajectory
-   type: franka_example_controllers/ShyController
+   type: FollowJointTrajectory
    default: true
    joints:
      - panda_joint1

@@ -122,7 +122,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::mutex admittance_mutex_;
   int trajectory_deformed_length = 1;      // N, samples
   int trajectory_deformed_length_target_ = 1; // N for dynamic reconf
-  int time_scaling_factor = 2;             // HACK to reduce velocity
+  int time_scaling_factor = 1;             // HACK to reduce velocity
   double coriolis_factor_{1.0};
 
   double filter_params_{0.005};
@@ -146,7 +146,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
   
   ros::Subscriber sub_trajectory_;
-  ros::Subscriber    trajectory_command_sub_;
+  ros::Subscriber trajectory_command_sub_;
 
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);

@@ -1,22 +1,25 @@
 <?xml version="1.0"?>
 <launch>
   <arg name="robot_ip" />
+  <arg name="arm_id" default="panda" />
   <arg name="load_gripper" />
 
   <!-- Launch real-robot control -->
   <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true" />
 
   <!-- By default use joint position controllers -->
-  <!-- <arg name="transmission" default="position" /> -->
+  <arg name="transmission" default="" />
+  <arg name="controller" default="shy_controller" />
   <!-- Start ROS controllers -->
     <!-- Load joint controller configurations from YAML file to parameter server -->
   <rosparam file="$(find panda_moveit_config)/config/ros_controllers.yaml" command="load"  subst_value="true"/>
   <rosparam file="$(find franka_experiments)/config/hw_controllers.yaml" command="load"  subst_value="true"/>
 
-  <!-- Load and start the controllers -->
-  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
-        args="panda_shy_controller" />
+  <include file="$(find panda_moveit_config)/launch/panda_moveit_controller_manager.launch.xml" />
 
+  <rosparam command="load" file="$(find franka_experiments)/config/franka_example_controllers.yaml" subst_value="true" />
+  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="shy_controller"/>
+  
   <!-- as well as MoveIt demo -->
   <include file="$(dirname)/demo.launch" pass_all_args="true">
     <!-- robot description is loaded by franka_control.launch -->
