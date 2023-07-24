@@ -11,11 +11,11 @@
   <!-- Start ROS controllers -->
     <!-- Load joint controller configurations from YAML file to parameter server -->
   <rosparam file="$(find panda_moveit_config)/config/ros_controllers.yaml" command="load"  subst_value="true"/>
-  <rosparam file="$(find franka_experiments)/config/franka_example_controllers.yaml" command="load"  subst_value="true"/>
+  <rosparam file="$(find franka_experiments)/config/hw_controllers.yaml" command="load"  subst_value="true"/>
 
   <!-- Load and start the controllers -->
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
-        args="shy_controller" />
+        args="panda_shy_controller" />
 
   <!-- as well as MoveIt demo -->
   <include file="$(dirname)/demo.launch" pass_all_args="true">
