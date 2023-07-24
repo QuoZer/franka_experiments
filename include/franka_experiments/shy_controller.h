@@ -71,12 +71,12 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   RealtimeGoalHandlePtr     rt_active_goal_;     ///< Currently active action goal, if any.
 
   //virtual bool updateTrajectoryCommand(const JointTrajectoryConstPtr& msg, RealtimeGoalHandlePtr gh, std::string* error_string = nullptr);
-  virtual void trajectoryCommandCB(const JointTrajectoryConstPtr& msg);
+  //virtual void trajectoryCommandCB(const JointTrajectoryConstPtr& msg);
   virtual void goalCB(GoalHandle gh);
   virtual void cancelCB(GoalHandle gh);
   virtual void preemptActiveGoal();
-  virtual bool queryStateService(control_msgs::QueryTrajectoryState::Request&  req,
-                                 control_msgs::QueryTrajectoryState::Response& resp);
+  // virtual bool queryStateService(control_msgs::QueryTrajectoryState::Request&  req,
+  //                                control_msgs::QueryTrajectoryState::Response& resp);
 
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;

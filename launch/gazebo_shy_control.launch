@@ -31,7 +31,7 @@
                 -J $(arg arm_id)_finger_joint2 0.001"
        />
   <arg name="interactive_marker" default="$(eval arg('controller') == 'cartesian_impedance_example_controller' or arg('controller') == 'cartesian_traject_controller')" doc="Should the interactive marker node be started?" />
-  <remap to="move_group/display_planned_path" from="shy_controller/move_group/display_planned_path" />
+  <remap to="move_group/display_planned_path" from="/shy_controller/command" />
 
   <include file="$(find franka_experiments)/launch/robot.launch">
     <arg name="gazebo" value="$(arg gazebo)" />

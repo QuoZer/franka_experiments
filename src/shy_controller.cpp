@@ -128,7 +128,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
       boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
 
   // ROS API: Subscribed topics
-  trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCommandCB, this);
+  trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCallback, this);
 
   // ROS API: Action interface
   action_server_.reset(
