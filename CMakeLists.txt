@@ -33,6 +33,9 @@ if(NOT Franka_FOUND)
   find_package(Franka 0.8.0 REQUIRED)
 endif()
 
+# find_package(catkin REQUIRED genmsg actionlib_msgs actionlib)
+# add_action_files(DIRECTORY action FILES DoDishes.action)
+
 # merge Franka + INCLUDE_DIRS in topological order
 list_insert_in_workspace_order(catkin_INCLUDE_DIRS ${Franka_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS})
 
@@ -91,10 +94,11 @@ list_insert_in_workspace_order(catkin_INCLUDE_DIRS ${Franka_INCLUDE_DIRS} ${catk
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  actionlib_msgs
+  std_msgs  # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##

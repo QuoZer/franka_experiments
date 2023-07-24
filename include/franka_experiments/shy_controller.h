@@ -16,6 +16,19 @@
 #include <ros/time.h>
 #include <Eigen/Dense>
 
+// ROS messages
+#include <control_msgs/FollowJointTrajectoryAction.h>
+#include <control_msgs/JointTrajectoryControllerState.h>
+#include <control_msgs/QueryTrajectoryState.h>
+#include <trajectory_msgs/JointTrajectory.h>
+
+// realtime_tools
+#include <realtime_tools/realtime_box.h>
+#include <realtime_tools/realtime_buffer.h>
+#include <realtime_tools/realtime_publisher.h>
+
+// actionlib
+#include <actionlib/server/action_server.h>
 #include <moveit_msgs/DisplayTrajectory.h>
 
 #include <franka_experiments/compliance_paramConfig.h>
@@ -39,6 +52,26 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
       const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
+
+  // Trajectory action stuff 
+  typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
+  typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
+  typedef ActionServer::GoalHandle                                                            GoalHandle;
+  typedef trajectory_msgs::JointTrajectory::ConstPtr                                          JointTrajectoryConstPtr;
+  //typedef realtime_tools::RealtimeServerGoalHandle<control_msgs::FollowJointTrajectoryAction> RealtimeGoalHandle;
+  //typedef boost::shared_ptr<RealtimeGoalHandle>                                               RealtimeGoalHandlePtr;
+  typedef realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>     StatePublisher;
+  typedef std::unique_ptr<StatePublisher>                                                     StatePublisherPtr;
+
+  ActionServerPtr    action_server_;
+
+  //virtual bool updateTrajectoryCommand(const JointTrajectoryConstPtr& msg, RealtimeGoalHandlePtr gh, std::string* error_string = nullptr);
+  virtual void trajectoryCommandCB(const JointTrajectoryConstPtr& msg);
+  virtual void goalCB(GoalHandle gh);
+  virtual void cancelCB(GoalHandle gh);
+  virtual void preemptActiveGoal();
+  virtual bool queryStateService(control_msgs::QueryTrajectoryState::Request&  req,
+                                 control_msgs::QueryTrajectoryState::Response& resp);
 
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
@@ -105,12 +138,13 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
+  
+  ros::Subscriber sub_trajectory_;
+  ros::Subscriber    trajectory_command_sub_;
+
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
   void precompute();
-  // Equilibrium pose subscriber
-//   ros::Subscriber sub_equilibrium_pose_;
-  ros::Subscriber sub_trajectory_;
 //   void equilibriumPoseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
   void trajectoryCallback(const moveit_msgs::DisplayTrajectory::ConstPtr& msg);
 };

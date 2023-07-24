@@ -127,6 +127,16 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   dynamic_server_compliance_param_->setCallback(
       boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
 
+  // ROS API: Subscribed topics
+  trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCommandCB, this);
+
+  // ROS API: Action interface
+  action_server_.reset(
+      new ActionServer(node_handle, "follow_joint_trajectory",
+                       std::bind(&ShyController::goalCB, this, std::placeholders::_1),
+                       std::bind(&ShyController::cancelCB, this, std::placeholders::_1), false));
+  action_server_->start();
+
   return true;
 }
 
