@@ -46,6 +46,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   bool init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle) override;
   void starting(const ros::Time&) override;
   void update(const ros::Time&, const ros::Duration& period) override;
+  void stopping(const ros::Time& /*time*/) override;
 
  private:
 
@@ -75,6 +76,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   virtual void goalCB(GoalHandle gh);
   virtual void cancelCB(GoalHandle gh);
   virtual void preemptActiveGoal();
+  void setActionFeedback();
   // virtual bool queryStateService(control_msgs::QueryTrajectoryState::Request&  req,
   //                                control_msgs::QueryTrajectoryState::Response& resp);
 

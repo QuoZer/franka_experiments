@@ -271,12 +271,13 @@ void  ShyController::update(const ros::Time& /*time*/,
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
       slow_index = 0;
       haveTrajectory = false;
-      current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-      current_active_goal->setSucceeded(current_active_goal->preallocated_result_);
-      current_active_goal.reset(); // do not publish feedback
-      rt_active_goal_.reset();
+      if (current_active_goal) {
+        current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
+        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);
+        current_active_goal.reset(); // do not publish feedback
+        rt_active_goal_.reset();
+      }
     }
-
   }
   
   // sanity check
@@ -305,6 +306,11 @@ void  ShyController::update(const ros::Time& /*time*/,
   // update parameters changed online through dynamic reconfigure 
   std::lock_guard<std::mutex> lock(admittance_mutex_);
   admittance = admittance_target_;
+}  // end update()
+
+void ShyController::stopping(const ros::Time& /*time*/)
+{
+  preemptActiveGoal();
 }
 
 Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
@@ -366,7 +372,7 @@ void  ShyController::trajectoryCallback(
     const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
 
   if (haveTrajectory){
-    ROS_WARN("Received a new trajectory while the old one is still being executed. Ignoring the new trajectory");
+    ROS_WARN("Received a new trajectory message while the old one is still being executed. Ignoring the new trajectory");
     return;
   }
 
@@ -386,7 +392,7 @@ void ShyController::goalCB(GoalHandle gh)
 {
   // Precondition: 
   if (haveTrajectory){
-    ROS_WARN("Received a new trajectory while the old one is still being executed. Ignoring the new trajectory");
+    ROS_WARN("Received a new trajectory action while the old one is still being executed. Ignoring the new trajectory");
     return;
   }
 
