@@ -21,7 +21,7 @@
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="shy_controller"/>
   
   <!-- as well as MoveIt demo -->
-  <include file="$(find panda_moveit_config)/demo.launch" pass_all_args="true">
+  <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true">
     <!-- robot description is loaded by franka_control.launch -->
     <arg name="load_robot_description" value="false" />
     <!-- MoveItSimpleControllerManager provides ros_control's JointTrajectory controllers
