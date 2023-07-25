@@ -52,6 +52,14 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void stopping(const ros::Time& /*time*/) override;
 
  private:
+  struct TimeData
+  {
+    TimeData() : time(0.0), period(0.0), uptime(0.0) {}
+
+    ros::Time     time;   ///< Time of last update cycle
+    ros::Duration period; ///< Period of last update cycle
+    ros::Time     uptime; ///< Controller uptime. Set to zero at every restart.
+  };
 
   typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
   typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
@@ -92,6 +100,9 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
+  // time structures
+  realtime_tools::RealtimeBuffer<TimeData> time_data_;
+  TimeData prev_time_data_;
   int loop_sample_time = 1000000;      // nsec
   
   // Traject stuff
@@ -123,7 +134,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Desired state
   Eigen::Matrix<double, 7, 1> dq_filtered_;
   Eigen::Matrix<double, 7, 1> q_d, delta_q, dq_d;      // desired joint position and velocity  
-  //Eigen::Matrix<double, 7, 1> prev_q_d, prev_dq_d;
   Eigen::Matrix<double, 7, 1> tau_d_calculated;
   Eigen::Matrix<double, 7, 1> tau_d_saturated;
   // PARAMETERS`

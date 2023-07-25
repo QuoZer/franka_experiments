@@ -204,8 +204,16 @@ void ShyController::precompute()
   ROS_INFO("Finished precompute");
 }
 
-void  ShyController::update(const ros::Time& /*time*/,
-                            const ros::Duration& /*period*/) {
+void  ShyController::update(const ros::Time& time,
+                            const ros::Duration& period) {
+  // Update time data (this blck is taken from OG joint traj conroller)
+  prev_time_data_ = *(time_data_.readFromRT());
+  TimeData time_data;
+  time_data.time   = time;                                     // Cache current time
+  time_data.period = period;                                   // Cache current control period
+  time_data.uptime = prev_time_data_.uptime + period;          // Update controller uptime
+  time_data_.writeFromNonRT(time_data);                        // TODO: Grrr, we need a lock-free data structure here!
+
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
@@ -269,7 +277,7 @@ void  ShyController::update(const ros::Time& /*time*/,
       haveTrajectory = false;
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);
+        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        
         current_active_goal.reset(); // do not publish feedback
         rt_active_goal_.reset();
       }
@@ -307,6 +315,29 @@ void  ShyController::update(const ros::Time& /*time*/,
 void ShyController::stopping(const ros::Time& /*time*/)
 {
   preemptActiveGoal();
+}
+
+void ShyController::setActionFeedback()
+{
+  RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
+  if (!current_active_goal)
+  {
+    return;
+  }
+  
+  current_active_goal->preallocated_feedback_->header.stamp          = time_data_.readFromRT()->time;
+  current_active_goal->preallocated_feedback_->desired.positions     = desired_state_.position;
+  current_active_goal->preallocated_feedback_->desired.velocities    = desired_state_.velocity;
+  current_active_goal->preallocated_feedback_->desired.accelerations = desired_state_.acceleration;
+  current_active_goal->preallocated_feedback_->desired.time_from_start = ros::Duration(desired_state_.time_from_start);
+  current_active_goal->preallocated_feedback_->actual.positions      = current_state_.position;
+  current_active_goal->preallocated_feedback_->actual.velocities     = current_state_.velocity;
+  current_active_goal->preallocated_feedback_->actual.time_from_start = ros::Duration(current_state_.time_from_start);
+  current_active_goal->preallocated_feedback_->error.positions       = state_error_.position;
+  current_active_goal->preallocated_feedback_->error.velocities      = state_error_.velocity;
+  current_active_goal->preallocated_feedback_->error.time_from_start = ros::Duration(state_error_.time_from_start);
+  current_active_goal->setFeedback( current_active_goal->preallocated_feedback_ );
+
 }
 
 Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
