@@ -12,7 +12,7 @@ Repo for Aalto University summer internship.
 - **gazebo_impendance_control.launch** - starts *certesian_trajectory_controller* in a simulated environment. Run trajectory_pub node to switch from interactive marker control to waypoint following. 
 - **hw_cartesian_impendance_control.launch** - the same but with a real robot. 
 - **gazebo_shy_control.launch** - starts *shy_controller* in a simulated environment. Use bagfiles to command trajectories and dynamic reconfigure to pick *admittance* and *deformation length* parameters. 
-- **hw_shy_control.launch [WIP!]** - attempts to run *shy_controller* using FCI. Running it at the moment might lead to *unforseen consequences*. 
+- **hw_shy_control.launch [WIP!]** - attempts to run *shy_controller* using FCI. Running it at the current stage may lead to *unforseen consequences*. 
 - **hw_moveit_shy_controller.launch [WIP!]** - attmepts to integrate *shy_controller* with moveit interface. 
 
 ## Notes

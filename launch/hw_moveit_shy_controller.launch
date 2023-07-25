@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="robot_ip" />
+  <arg name="robot_ip" default="172.16.0.2"/>
   <arg name="arm_id" default="panda" />
   <arg name="load_gripper" />
 
@@ -8,7 +8,7 @@
   <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true" />
 
   <!-- By default use joint position controllers -->
-  <arg name="transmission" default="" />
+  <!-- <arg name="transmission" default="" /> -->
   <arg name="controller" default="shy_controller" />
   <!-- Start ROS controllers -->
     <!-- Load joint controller configurations from YAML file to parameter server -->
@@ -21,11 +21,13 @@
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="shy_controller"/>
   
   <!-- as well as MoveIt demo -->
-  <include file="$(dirname)/demo.launch" pass_all_args="true">
+  <include file="$(find panda_moveit_config)/demo.launch" pass_all_args="true">
     <!-- robot description is loaded by franka_control.launch -->
     <arg name="load_robot_description" value="false" />
     <!-- MoveItSimpleControllerManager provides ros_control's JointTrajectory controllers
          as well as GripperCommand actions -->
     <arg name="moveit_controller_manager" value="simple" />
   </include>
+
+  <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" required="false" />
 </launch>

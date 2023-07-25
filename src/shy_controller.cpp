@@ -255,7 +255,7 @@ void  ShyController::update(const ros::Time& /*time*/,
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
-    // remove the first row and move the rest up
+    // shift the deformation window one step 
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
     // add new new waypoint to the end
@@ -264,7 +264,7 @@ void  ShyController::update(const ros::Time& /*time*/,
     else
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
     
-    // termination
+    // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
     if (slow_index == trajectory_length - 1)
     {
@@ -298,8 +298,6 @@ void  ShyController::update(const ros::Time& /*time*/,
   // 1000 * (1 / sampling_time).
   tau_d_saturated = saturateTorqueRate(tau_d_calculated, tau_J_d);
   
-  // cartiesian example has nullspace stiffness as well, skipping for now
-
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
@@ -333,7 +331,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
 {
   num_of_joints = traj.joint_names.size();
   trajectory_length = traj.points.size();
-    // Convert to eigen
+  // Convert to eigen
   trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
@@ -375,12 +373,10 @@ void  ShyController::trajectoryCallback(
   if (!msg->model_id.empty() && msg->model_id != robot_model_)
     ROS_WARN("Received a trajectory to display for model '%s' but model '%s' was expected", msg->model_id.c_str(), robot_model_.c_str());
 
-  // TODO: ParseTrajectory
   trajectory_ = msg->trajectory[0].joint_trajectory;
   parseTrajectory(trajectory_);    
   
   haveTrajectory = true;
-  
 } 
 
 /*
