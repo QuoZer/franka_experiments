@@ -31,7 +31,8 @@
                 -J $(arg arm_id)_finger_joint2 0.001"
        />
   <arg name="interactive_marker" default="False" doc="Should the interactive marker node be started?" />
-  <remap to="move_group/display_planned_path" from="/shy_controller/command" />
+  <!-- Topic interface in addition to actions -->
+  <!-- <remap to="move_group/display_planned_path" from="/shy_controller/command" /> -->
 
   <include file="$(find franka_experiments)/launch/robot.launch">
     <arg name="gazebo" value="$(arg gazebo)" />

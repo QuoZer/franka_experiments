@@ -17,3 +17,4 @@ Repo for Aalto University summer internship.
 
 ## Notes
 - Edit **simple_moveit_controllers.yaml** in *panda_moveit_config* package files to run on a real robot. TODO: Fix this
+- Disable *execution_duration_monitoring* in *trajectory_execution.launch.xml* to avoid timeouts
