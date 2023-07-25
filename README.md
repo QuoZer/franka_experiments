@@ -15,3 +15,5 @@ Repo for Aalto University summer internship.
 - **hw_shy_control.launch [WIP!]** - attempts to run *shy_controller* using FCI. Running it at the moment might lead to *unforseen consequences*. 
 - **hw_moveit_shy_controller.launch [WIP!]** - attmepts to integrate *shy_controller* with moveit interface. 
 
+## Notes
+- Edit **simple_moveit_controllers.yaml** in *panda_moveit_config* package files to run on a real robot. TODO: Fix this
