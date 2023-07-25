@@ -154,12 +154,8 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   dq_initial.fill(0);
   dq_d = dq_initial;    // zero
   delta_q = dq_initial;
-
-  // set nullspace equilibrium configuration to initial q
-  q_d_nullspace_ = q_initial;
   
   precompute();
-
 }
 
 void ShyController::precompute()
@@ -383,6 +379,7 @@ void  ShyController::trajectoryCallback(
   parseTrajectory(trajectory_);    
   
   haveTrajectory = true;
+  preemptActiveGoal();
 } 
 
 /*
