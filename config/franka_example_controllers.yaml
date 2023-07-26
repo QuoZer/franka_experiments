@@ -22,21 +22,21 @@ shy_controller:
         - $(arg arm_id)_joint6
         - $(arg arm_id)_joint7
     k_gains:
-        - 600.0
-        - 600.0
-        - 600.0
-        - 600.0
-        - 250.0
-        - 150.0
-        - 50.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 400.0
+        - 200.0
+        - 130.0
+        - 35.0
     d_gains:
-        - 50.0
-        - 50.0
-        - 50.0
-        - 20.0
-        - 20.0
-        - 20.0
-        - 10.0
+        - 40.0
+        - 40.0
+        - 40.0
+        - 16.0
+        - 16.0
+        - 16.0
+        - 8.0
     coriolis_factor: 1.0
     trajectory_deformed_length: 10
-    admittance: 0.01
+    admittance: 0.001
