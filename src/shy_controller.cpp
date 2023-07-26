@@ -256,7 +256,7 @@ void  ShyController::update(const ros::Time& time,
       // Nx7 = 1x1 * Nx1 * 1x7
       trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
     #endif
-    trajectory_frame_positions += trajectory_deformation_;
+    trajectory_frame_positions -= trajectory_deformation_;
     
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
