@@ -291,21 +291,22 @@ void  ShyController::update(const ros::Time& time,
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
         current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        
-        current_active_goal.reset(); // do not publish feedback
+        current_active_goal.reset(); 
         rt_active_goal_.reset();
         
       }
     }
 
     setActionFeedback(desired_state, current_state);
-  }
+  } // end traj deform
   
   // sanity check
   if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
   {
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
-  if ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) 
+  // probably the condition is a bit too basic. TODO: drop the trajectory and stop instead of runtime_error
+  if ( (q_d-q).maxCoeff() > 0.05 || (q_d-q).minCoeff() < -0.05) 
   {
     throw std::runtime_error("Trajectory positions are too far from current robot state");
   }
@@ -322,7 +323,7 @@ void  ShyController::update(const ros::Time& time,
   // Maximum torque difference with a sampling rate of 1 kHz. The maximum torque rate is
   // 1000 * (1 / sampling_time).
   tau_d_saturated = saturateTorqueRate(tau_d_calculated, tau_J_d);
-  
+  // sending tau to the robot
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
@@ -433,9 +434,6 @@ void  ShyController::trajectoryCallback(
   preemptActiveGoal();
 } 
 
-/*
-  Update goal trajectory with action interface 
-*/
 void ShyController::goalCB(GoalHandle gh)
 {
   // Precondition: 
@@ -467,9 +465,6 @@ void ShyController::goalCB(GoalHandle gh)
   goal_handle_timer_.start();
 }
 
-/*
-  Cancel current trajectory with action interface
-*/
 void ShyController::cancelCB(GoalHandle gh)
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
