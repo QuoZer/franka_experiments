@@ -23,6 +23,9 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
+  // save nh
+  controller_nh_ = node_handle;
+
   sub_trajectory_ = node_handle.subscribe(
       "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
@@ -155,6 +158,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   dq_d = dq_initial;    // zero
   delta_q = dq_initial;
   
+  haveTrajectory = false; // to be sure
   precompute();
 }
 
@@ -164,8 +168,8 @@ void ShyController::precompute()
   int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
-  dq_filtered_.fill(0);   // init with zeros
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
+  dq_filtered_.fill(0);   // init with zeros
 
   #ifdef ALT_METHOD
     // metthod from "Physical Interaction as Communication"
@@ -204,28 +208,40 @@ void ShyController::precompute()
   ROS_INFO("Finished precompute");
 }
 
-void  ShyController::update(const ros::Time& /*time*/,
-                            const ros::Duration& /*period*/) {
+void  ShyController::update(const ros::Time& time,
+                            const ros::Duration& period) {
+  // Update time data (this block is taken from OG joint traj conroller)
+  prev_time_data_ = *(time_data_.readFromRT());
+  TimeData time_data;
+  time_data.time   = time;                                     // Cache current time
+  time_data.period = period;                                   // Cache current control period
+  time_data.uptime = prev_time_data_.uptime + period;          // Update controller uptime
+  time_data_.writeFromNonRT(time_data);                        // TODO: Grrr, we need a lock-free data structure here!
+
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
+  // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
+  State current_state;
+  current_state.position = std::vector<double>(robot_state.q.data(), robot_state.q.data() + robot_state.q.size());
+  current_state.velocity = std::vector<double>(robot_state.dq.data(), robot_state.dq.data() + robot_state.dq.size());
+  current_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
 
   // convert to Eigen
   Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
   Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(  // NOLINT (readability-identifier-naming)
-      robot_state.tau_J_d.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
 
   // TRAJECTORY DEFORMATION
   if (haveTrajectory) {
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
   }
-  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    // time system is not reliable 
+  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    // time system is not reliable TODO: test it
   {
     slow_index++;
     fast_index = 0;
@@ -251,6 +267,11 @@ void  ShyController::update(const ros::Time& /*time*/,
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
+    State desired_state;
+    desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
+    desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
+    desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
+
     // shift the deformation window one step 
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
@@ -269,20 +290,27 @@ void  ShyController::update(const ros::Time& /*time*/,
       haveTrajectory = false;
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);
+        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        
         current_active_goal.reset(); // do not publish feedback
         rt_active_goal_.reset();
+        
       }
     }
+
+    setActionFeedback(desired_state, current_state);
   }
   
   // sanity check
   if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
   {
-    throw std::runtime_error("Trajectory positions, q_d or dq_d is not finite");
+    throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
+  }
+  if ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) 
+  {
+    throw std::runtime_error("Trajectory positions are too far from current robot state");
   }
 
-  // from joint impedance example
+  // filtering from the joint impedance example
   double alpha = 0.99;
   dq_filtered_ = (1 - alpha) * dq_filtered_ + alpha * dq;
   // impedance control
@@ -307,6 +335,29 @@ void  ShyController::update(const ros::Time& /*time*/,
 void ShyController::stopping(const ros::Time& /*time*/)
 {
   preemptActiveGoal();
+}
+
+void ShyController::setActionFeedback(State& desired_state, State& current_state)
+{
+  RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
+  if (!current_active_goal)
+  {
+    return;
+  }
+  
+  current_active_goal->preallocated_feedback_->header.stamp          = time_data_.readFromRT()->time;
+  current_active_goal->preallocated_feedback_->desired.positions     = desired_state.position;
+  current_active_goal->preallocated_feedback_->desired.velocities    = desired_state.velocity;
+  current_active_goal->preallocated_feedback_->desired.accelerations = desired_state.acceleration;
+  current_active_goal->preallocated_feedback_->desired.time_from_start = desired_state.time_from_start;
+  current_active_goal->preallocated_feedback_->actual.positions      = current_state.position;
+  current_active_goal->preallocated_feedback_->actual.velocities     = current_state.velocity;
+  current_active_goal->preallocated_feedback_->actual.time_from_start = current_state.time_from_start;
+  // current_active_goal->preallocated_feedback_->error.positions       = state_error_.position;
+  // current_active_goal->preallocated_feedback_->error.velocities      = state_error_.velocity;
+  // current_active_goal->preallocated_feedback_->error.time_from_start = ros::Duration(state_error_.time_from_start);
+  current_active_goal->setFeedback( current_active_goal->preallocated_feedback_ );
+
 }
 
 Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
@@ -368,7 +419,7 @@ void  ShyController::trajectoryCallback(
     const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
 
   if (haveTrajectory){
-    ROS_WARN("Received a new trajectory message while the old one is still being executed. Ignoring the new trajectory");
+    ROS_WARN("Received a new trajectory message while the old one is still being executed. Ignoring the new trajectory");    
     return;
   }
 
@@ -390,6 +441,10 @@ void ShyController::goalCB(GoalHandle gh)
   // Precondition: 
   if (haveTrajectory){
     ROS_WARN("Received a new trajectory action while the old one is still being executed. Ignoring the new trajectory");
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
+    result.error_string = "Prev trajectory is still being executed";
+    gh.setRejected(result);
     return;
   }
 
@@ -400,16 +455,16 @@ void ShyController::goalCB(GoalHandle gh)
   parseTrajectory(trajectory_);
 
   preemptActiveGoal();
+  
   gh.setAccepted();
   rt_active_goal_ = rt_goal;
   haveTrajectory = true;
 
-    // Setup goal status checking timer
-    // goal_handle_timer_ = controller_nh_.createTimer(action_monitor_period_,
-    //                                                 &RealtimeGoalHandle::runNonRealtime,
-    //                                                 rt_goal);
-    // goal_handle_timer_.start();
-
+  // Setup goal status checking timer
+  goal_handle_timer_ = controller_nh_.createTimer(ros::Duration(1.0 / action_monitor_rate),
+                                                  &RealtimeGoalHandle::runNonRealtime,
+                                                  rt_goal);
+  goal_handle_timer_.start();
 }
 
 /*

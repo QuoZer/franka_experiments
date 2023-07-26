@@ -52,6 +52,24 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void stopping(const ros::Time& /*time*/) override;
 
  private:
+  struct TimeData
+  {
+    TimeData() : time(0.0), period(0.0), uptime(0.0) {}
+
+    ros::Time     time;   ///< Time of last update cycle
+    ros::Duration period; ///< Period of last update cycle
+    ros::Time     uptime; ///< Controller uptime. Set to zero at every restart.
+  };
+
+  struct State
+  {
+    State() : position(7, 0.0), velocity(7, 0.0), acceleration(7, 0.0), time_from_start(0.0) {} 
+
+    std::vector<double> position;
+    std::vector<double> velocity;
+    std::vector<double> acceleration;
+    ros::Duration time_from_start;
+  };
 
   typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
   typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
@@ -62,7 +80,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   typedef realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>     StatePublisher;
   typedef std::unique_ptr<StatePublisher>                                                     StatePublisherPtr;
 
-  void initTrajectDeformation();
   /* \brief Reads and saves trajectory message into internal data structures */
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
   /* \brief Generates the trajectory deformation matrix based on the deformation length  */
@@ -76,6 +93,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Trajectory action stuff 
   ActionServerPtr    action_server_;
   RealtimeGoalHandlePtr     rt_active_goal_;     ///< Currently active action goal, if any.
+
   /* Dynamic reconfigure CB */
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
@@ -87,12 +105,18 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   /* Cancel the active goal */
   virtual void preemptActiveGoal();
   /* Form and send action feedback TODO */
-  void setActionFeedback();
+  void setActionFeedback(State& desired_state, State& current_state);
 
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
+  
+  // time structures
+  realtime_tools::RealtimeBuffer<TimeData> time_data_;
+  TimeData prev_time_data_;
+  ros::Timer goal_handle_timer_;
   int loop_sample_time = 1000000;      // nsec
+  double action_monitor_rate = 20.0;   // Hz
   
   // Traject stuff
   bool haveTrajectory = false; 
@@ -123,7 +147,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Desired state
   Eigen::Matrix<double, 7, 1> dq_filtered_;
   Eigen::Matrix<double, 7, 1> q_d, delta_q, dq_d;      // desired joint position and velocity  
-  //Eigen::Matrix<double, 7, 1> prev_q_d, prev_dq_d;
   Eigen::Matrix<double, 7, 1> tau_d_calculated;
   Eigen::Matrix<double, 7, 1> tau_d_saturated;
   // PARAMETERS`
@@ -144,10 +167,9 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
-  
+  ros::NodeHandle controller_nh_;
   ros::Subscriber sub_trajectory_;
   ros::Subscriber trajectory_command_sub_;
-
 };
 
 }  // namespace franka_example_controllers
