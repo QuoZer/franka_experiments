@@ -23,6 +23,9 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
 
+  // save nh
+  controller_nh_ = node_handle;
+
   sub_trajectory_ = node_handle.subscribe(
       "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,
       ros::TransportHints().reliable().tcpNoDelay());
@@ -307,7 +310,7 @@ void  ShyController::update(const ros::Time& time,
     throw std::runtime_error("Trajectory positions are too far from current robot state");
   }
 
-  // from joint impedance example
+  // filtering from the joint impedance example
   double alpha = 0.99;
   dq_filtered_ = (1 - alpha) * dq_filtered_ + alpha * dq;
   // impedance control
@@ -452,16 +455,16 @@ void ShyController::goalCB(GoalHandle gh)
   parseTrajectory(trajectory_);
 
   preemptActiveGoal();
+  
   gh.setAccepted();
   rt_active_goal_ = rt_goal;
   haveTrajectory = true;
 
-    // Setup goal status checking timer
-    // goal_handle_timer_ = controller_nh_.createTimer(action_monitor_period_,
-    //                                                 &RealtimeGoalHandle::runNonRealtime,
-    //                                                 rt_goal);
-    // goal_handle_timer_.start();
-
+  // Setup goal status checking timer
+  goal_handle_timer_ = controller_nh_.createTimer(ros::Duration(1.0 / action_monitor_rate),
+                                                  &RealtimeGoalHandle::runNonRealtime,
+                                                  rt_goal);
+  goal_handle_timer_.start();
 }
 
 /*
