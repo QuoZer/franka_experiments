@@ -93,7 +93,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Trajectory action stuff 
   ActionServerPtr    action_server_;
   RealtimeGoalHandlePtr     rt_active_goal_;     ///< Currently active action goal, if any.
-  
+
   /* Dynamic reconfigure CB */
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
@@ -110,10 +110,13 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
+  
   // time structures
   realtime_tools::RealtimeBuffer<TimeData> time_data_;
   TimeData prev_time_data_;
+  ros::Timer goal_handle_timer_;
   int loop_sample_time = 1000000;      // nsec
+  double action_monitor_rate = 20.0;   // Hz
   
   // Traject stuff
   bool haveTrajectory = false; 
@@ -164,7 +167,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
-  
+  ros::NodeHandle controller_nh_;
   ros::Subscriber sub_trajectory_;
   ros::Subscriber trajectory_command_sub_;
 };
