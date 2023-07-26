@@ -61,6 +61,16 @@ class  ShyController : public controller_interface::MultiInterfaceController<
     ros::Time     uptime; ///< Controller uptime. Set to zero at every restart.
   };
 
+  struct State
+  {
+    State() : position(7, 0.0), velocity(7, 0.0), acceleration(7, 0.0), time_from_start(0.0) {} 
+
+    std::vector<double> position;
+    std::vector<double> velocity;
+    std::vector<double> acceleration;
+    ros::Duration time_from_start;
+  };
+
   typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
   typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
   typedef ActionServer::GoalHandle                                                            GoalHandle;
@@ -70,7 +80,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   typedef realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>     StatePublisher;
   typedef std::unique_ptr<StatePublisher>                                                     StatePublisherPtr;
 
-  void initTrajectDeformation();
   /* \brief Reads and saves trajectory message into internal data structures */
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
   /* \brief Generates the trajectory deformation matrix based on the deformation length  */
@@ -84,6 +93,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Trajectory action stuff 
   ActionServerPtr    action_server_;
   RealtimeGoalHandlePtr     rt_active_goal_;     ///< Currently active action goal, if any.
+  
   /* Dynamic reconfigure CB */
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
@@ -95,7 +105,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   /* Cancel the active goal */
   virtual void preemptActiveGoal();
   /* Form and send action feedback TODO */
-  void setActionFeedback();
+  void setActionFeedback(State& desired_state, State& current_state);
 
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
@@ -157,7 +167,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   
   ros::Subscriber sub_trajectory_;
   ros::Subscriber trajectory_command_sub_;
-
 };
 
 }  // namespace franka_example_controllers
