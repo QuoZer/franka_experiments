@@ -293,7 +293,6 @@ void  ShyController::update(const ros::Time& time,
         current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        
         current_active_goal.reset(); 
         rt_active_goal_.reset();
-        
       }
     }
 
@@ -474,12 +473,6 @@ void ShyController::cancelCB(GoalHandle gh)
   {
     // Reset current goal
     rt_active_goal_.reset();
-
-    // Controller uptime
-    //const ros::Time uptime = time_data_.readFromRT()->uptime;
-
-    // Enter hold current position mode
-    //setHoldPosition(uptime);
     ROS_INFO("Canceling active action goal because cancel callback recieved from actionlib.");
 
     // Mark the current goal as canceled
