@@ -241,7 +241,7 @@ void  ShyController::update(const ros::Time& time,
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
   }
-  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    // time system is not reliable TODO: test it
+  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    //  TODO: switch to time-based (instead of index-based) trajectory sampling?
   {
     slow_index++;
     fast_index = 0;
@@ -435,7 +435,16 @@ void  ShyController::trajectoryCallback(
 
 void ShyController::goalCB(GoalHandle gh)
 {
-  // Precondition: 
+  // Preconditions:
+  if (!this->isRunning())
+  {
+    ROS_WARN("Can't accept new action goals. Controller is not running.");
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
+    result.error_string = "Controller is not running";
+    gh.setRejected(result);
+    return;
+  }
   if (haveTrajectory){
     ROS_WARN("Received a new trajectory action while the old one is still being executed. Ignoring the new trajectory");
     control_msgs::FollowJointTrajectoryResult result;
