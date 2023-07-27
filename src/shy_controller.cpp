@@ -289,6 +289,7 @@ void  ShyController::update(const ros::Time& time,
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
         current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
+        current_active_goal->runNonRealtime(ros::TimerEvent());                              // now it works. doesn't look realtime-safe though
         current_active_goal.reset(); 
         rt_active_goal_.reset();
       }
