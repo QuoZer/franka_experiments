@@ -225,7 +225,9 @@ void  ShyController::update(const ros::Time& time,
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
+      
   // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
+  State desired_state;  
   State current_state;
   current_state.position = std::vector<double>(robot_state.q.data(), robot_state.q.data() + robot_state.q.size());
   current_state.velocity = std::vector<double>(robot_state.dq.data(), robot_state.dq.data() + robot_state.dq.size());
@@ -262,22 +264,16 @@ void  ShyController::update(const ros::Time& time,
     
     // update q_d and qd_d
     q_d = trajectory_frame_positions.row(0);
-    
     delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
-    State desired_state;
-    desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
-    desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
-    desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-
     // shift the deformation window one step 
+    // and add new new waypoint to the end
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
-    // add new new waypoint to the end
     if (slow_index+trajectory_deformed_length < trajectory_length)
       trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
     else
@@ -292,11 +288,15 @@ void  ShyController::update(const ros::Time& time,
       haveTrajectory = false;
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        
-        // current_active_goal.reset(); 
+        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
+        current_active_goal.reset(); 
         rt_active_goal_.reset();
       }
     }
+
+    desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
+    desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
+    desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
 
     setActionFeedback(desired_state, current_state);
   } // end traj deform
@@ -306,7 +306,7 @@ void  ShyController::update(const ros::Time& time,
   {
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
-  // probably the condition is a bit too basic. TODO: drop the trajectory and stop instead of runtime_error
+  // probably the condition is a bit too basic. 
   if ( (q_d-q).maxCoeff() > 0.07 || (q_d-q).minCoeff() < -0.07) 
   {
     preemptActiveGoal();
