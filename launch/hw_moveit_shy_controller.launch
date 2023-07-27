@@ -13,7 +13,7 @@
   <!-- Start ROS controllers -->
     <!-- Load joint controller configurations from YAML file to parameter server -->
   <rosparam file="$(find panda_moveit_config)/config/ros_controllers.yaml" command="load"  subst_value="true"/>
-  <rosparam file="$(find franka_experiments)/config/hw_controllers.yaml" command="load"  subst_value="true"/>
+  <rosparam file="$(find franka_experiments)/config/hw_controllers.yaml"   command="load"  subst_value="true"/>
 
   <include file="$(find panda_moveit_config)/launch/panda_moveit_controller_manager.launch.xml" />
 
