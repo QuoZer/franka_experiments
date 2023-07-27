@@ -308,7 +308,7 @@ void  ShyController::update(const ros::Time& time,
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
   // probably the condition is a bit too basic. 
-  if ( (q_d-q).maxCoeff() > 0.07 || (q_d-q).minCoeff() < -0.07) 
+  if ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) 
   {
     preemptActiveGoal();
     this->startRequest(time_data.uptime);
