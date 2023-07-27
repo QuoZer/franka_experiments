@@ -311,7 +311,7 @@ void  ShyController::update(const ros::Time& time,
   if ( (q_d-q).maxCoeff() > 0.07 || (q_d-q).minCoeff() < -0.07) 
   {
     preemptActiveGoal();
-    haveTrajectory = false; 
+    this->startRequest(time_data.uptime);
     ROS_WARN("Trajectory positions are too far from current robot state. Dropping the goal");
     //throw std::runtime_error("Trajectory positions are too far from current robot state");
   }
