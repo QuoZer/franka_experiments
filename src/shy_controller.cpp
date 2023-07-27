@@ -159,6 +159,8 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   delta_q = dq_initial;
   
   haveTrajectory = false; // to be sure
+  fast_index = -1;
+  slow_index = -1;
   precompute();
 }
 
@@ -291,7 +293,7 @@ void  ShyController::update(const ros::Time& time,
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
         current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        
-        current_active_goal.reset(); 
+        // current_active_goal.reset(); 
         rt_active_goal_.reset();
       }
     }
@@ -305,9 +307,12 @@ void  ShyController::update(const ros::Time& time,
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
   // probably the condition is a bit too basic. TODO: drop the trajectory and stop instead of runtime_error
-  if ( (q_d-q).maxCoeff() > 0.05 || (q_d-q).minCoeff() < -0.05) 
+  if ( (q_d-q).maxCoeff() > 0.07 || (q_d-q).minCoeff() < -0.07) 
   {
-    throw std::runtime_error("Trajectory positions are too far from current robot state");
+    preemptActiveGoal();
+    haveTrajectory = false; 
+    ROS_WARN("Trajectory positions are too far from current robot state. Dropping the goal");
+    //throw std::runtime_error("Trajectory positions are too far from current robot state");
   }
 
   // filtering from the joint impedance example
