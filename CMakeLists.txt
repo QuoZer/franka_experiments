@@ -10,21 +10,22 @@ set(CMAKE_BUILD_TYPE Release)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  controller_interface
-  dynamic_reconfigure
-  eigen_conversions
-  franka_hw
-  franka_gripper
-  hardware_interface
-  joint_limits_interface
-  pluginlib
-  realtime_tools
   roscpp
   rospy
-  std_msgs
-  geometry_msgs
   tf
   tf_conversions
+  pluginlib
+  realtime_tools
+  franka_hw
+  franka_gripper
+  controller_interface
+  joint_limits_interface
+  hardware_interface
+  dynamic_reconfigure
+  eigen_conversions
+  std_msgs
+  geometry_msgs
+  visualization_msgs
 )
 
 find_package(Eigen3 REQUIRED)

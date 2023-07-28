@@ -24,6 +24,7 @@
 #include <control_msgs/QueryTrajectoryState.h>
 #include <trajectory_msgs/JointTrajectory.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <visualization_msgs/MarkerArray.h>
 
 // realtime_tools
 #include <realtime_tools/realtime_box.h>
@@ -52,6 +53,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void stopping(const ros::Time& /*time*/) override;
 
  private:
+ /* Time storing data structure */
   struct TimeData
   {
     TimeData() : time(0.0), period(0.0), uptime(0.0) {}
@@ -61,6 +63,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
     ros::Time     uptime; ///< Controller uptime. Set to zero at every restart.
   };
 
+/* Joint states data structure*/
   struct State
   {
     State() : position(7, 0.0), velocity(7, 0.0), acceleration(7, 0.0), time_from_start(0.0) {} 
@@ -77,8 +80,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   typedef trajectory_msgs::JointTrajectory::ConstPtr                                          JointTrajectoryConstPtr;
   typedef realtime_tools::RealtimeServerGoalHandle<control_msgs::FollowJointTrajectoryAction> RealtimeGoalHandle;
   typedef boost::shared_ptr<RealtimeGoalHandle>                                               RealtimeGoalHandlePtr;
-  typedef realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>     StatePublisher;
-  typedef std::unique_ptr<StatePublisher>                                                     StatePublisherPtr;
+  typedef realtime_tools::RealtimePublisher<visualization_msgs::MarkerArray>                  MarkerPublisher;
+  typedef std::unique_ptr<MarkerPublisher>                                                    MarkerPublisherPtr;
 
   /* \brief Reads and saves trajectory message into internal data structures */
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
@@ -97,11 +100,25 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void trajectoryCallback(const moveit_msgs::DisplayTrajectory::ConstPtr& msg);
   /* Trajectory action CB */
   virtual void goalCB(GoalHandle gh);
-  virtual void cancelCB(GoalHandle gh);
   /* Cancel the active goal */
+  virtual void cancelCB(GoalHandle gh);
   virtual void preemptActiveGoal();
   /* Form and send action feedback TODO */
   void setActionFeedback(State& desired_state, State& current_state);
+  /* Send updated trajectory visualization */
+  void publishTrajectoryMarkers(Eigen::MatrixXd& trajectory);
+  /* Fill a full original trajectory marker vector */
+  void fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency);
+
+  // Viz markers
+  visualization_msgs::MarkerArray full_trajectory_markers_;
+  Eigen::Matrix<double, 7, 4> dh;
+  /* Calc DH matrix for the given configuration */
+  Eigen::Matrix<double, 7, 4> dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable);
+  /* Calc transformation matrix for the input joint */
+  Eigen::Matrix4d TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh);
+  /* Get translation vector from the given configuration */
+  void forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation);
 
   // time structures
   realtime_tools::RealtimeBuffer<TimeData> time_data_;
@@ -164,9 +181,12 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   double filter_params_{0.005};
   const double delta_tau_max_{1.0};
 
+  // ROS things
   ros::NodeHandle controller_nh_;
   ros::Subscriber sub_trajectory_;
   ros::Subscriber trajectory_command_sub_;
+  MarkerPublisherPtr marker_publisher_; 
+
   // Dynamic reconfigure
   std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
       dynamic_server_compliance_param_;
