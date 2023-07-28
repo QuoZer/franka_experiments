@@ -544,7 +544,8 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
       marker.pose.position.z = translation(2);
       markers.markers.push_back(marker);
     }
-    markers.markers.insert(markers.markers.begin(), full_trajectory_markers_.markers.begin(), full_trajectory_markers_.markers.end());
+    // Append full trajectory markers
+    markers.markers.insert(markers.markers.end(), full_trajectory_markers_.markers.begin(), full_trajectory_markers_.markers.end());
     marker_publisher_->msg_ = markers;
     marker_publisher_->unlockAndPublish();
   }
