@@ -303,7 +303,7 @@ void  ShyController::update(const ros::Time& time,
     desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
 
     //setActionFeedback(desired_state, current_state);
-    
+
     publishTrajectoryMarkers(trajectory_frame_positions);
   } // end traj deform
   
@@ -371,86 +371,6 @@ void ShyController::setActionFeedback(State& desired_state, State& current_state
 
 }
 
-void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
-{
-  if (marker_publisher_ && marker_publisher_->trylock())
-  {
-    visualization_msgs::MarkerArray markers;
-    visualization_msgs::Marker marker;
-    marker.header.frame_id = "panda_link0";
-    marker.header.stamp = ros::Time::now();
-    marker.type = visualization_msgs::Marker::SPHERE;
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.scale.x = 0.01;
-    marker.scale.y = 0.01;
-    marker.scale.z = 0.01;
-    marker.color.a = 1.0;
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
-
-    Eigen::Vector3d translation;
-    for (int i = 0; i < trajectory.rows(); i++)
-    {
-      forwardKinematics(trajectory.row(i).transpose(), translation);
-      marker.id = i;
-      marker.pose.position.x = translation(0);
-      marker.pose.position.y = translation(1);
-      marker.pose.position.z = translation(2);
-      markers.markers.push_back(marker);
-    }
-    marker_publisher_->msg_ = markers;
-    marker_publisher_->unlockAndPublish();
-  }
-}
-
-Eigen::Matrix<double, 7, 4> ShyController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
-{
-  // Create DH parameters (data given by maker franka-emika)
-  dh <<   0,      0,        0.333,   joint_variable(0, 0),
-      -M_PI/2,   0,        0,       joint_variable(1, 0),
-        M_PI/2,   0,        0.316,   joint_variable(2, 0),
-        M_PI/2,   0.0825,   0,       joint_variable(3, 0),
-      -M_PI/2,  -0.0825,   0.384,   joint_variable(4, 0),
-        M_PI/2,   0,        0,       joint_variable(5, 0),
-        M_PI/2,   0.088,    0.107,   joint_variable(6, 0);
-
-  return dh;
-}
-
-Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh) 
-{
-  double alpha = dh(i, 0);
-  double a = dh(i, 1);
-  double d = dh(i, 2);
-  double q = dh(i, 3);
-
-  Eigen::Matrix4d TF;
-  TF << cos(q), -sin(q), 0, a,
-        sin(q) * cos(alpha), cos(q) * cos(alpha), -sin(alpha), -sin(alpha) * d,
-        sin(q) * sin(alpha), cos(q) * sin(alpha), cos(alpha), cos(alpha) * d,
-        0, 0, 0, 1;
-  return TF;
-}
-
-void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation)
-{
-  Eigen::Matrix<double, 7, 4> dh_parameters = dh_params(joint_pose);
-
-  Eigen::Matrix4d T_01 = TF_matrix(0, dh_parameters);
-  Eigen::Matrix4d T_12 = TF_matrix(1, dh_parameters);
-  Eigen::Matrix4d T_23 = TF_matrix(2, dh_parameters);
-  Eigen::Matrix4d T_34 = TF_matrix(3, dh_parameters);
-  Eigen::Matrix4d T_45 = TF_matrix(4, dh_parameters);
-  Eigen::Matrix4d T_56 = TF_matrix(5, dh_parameters);
-  Eigen::Matrix4d T_67 = TF_matrix(6, dh_parameters);
-
-  Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
-
-  // Assume quaternion_from_matrix and translation_from_matrix functions exist
-  //Eigen::Quaterniond quaternions = quaternion_from_matrix(T_07);
-  translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
-}
 
 Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
@@ -502,6 +422,8 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = traj.points[i].time_from_start.toNSec();
   }
+
+  fillFullTrajectoryMarkers(trajectory_positions, 4);
 
   ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
                  trajectory_length, trajectory_deformed_length, admittance);
@@ -592,6 +514,117 @@ inline void ShyController::preemptActiveGoal()
     rt_active_goal_.reset();
     current_active_goal->gh_.setCanceled();
   }
+}
+
+void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
+{
+  if (marker_publisher_ && marker_publisher_->trylock())
+  {
+    visualization_msgs::MarkerArray markers;
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "panda_link0";
+    marker.header.stamp = ros::Time::now();
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.scale.x = 0.01;
+    marker.scale.y = 0.01;
+    marker.scale.z = 0.01;
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+
+    Eigen::Vector3d translation;
+    for (int i = 0; i < trajectory.rows(); i++)
+    {
+      forwardKinematics(trajectory.row(i).transpose(), translation);
+      marker.id = i;
+      marker.pose.position.x = translation(0);
+      marker.pose.position.y = translation(1);
+      marker.pose.position.z = translation(2);
+      markers.markers.push_back(marker);
+    }
+    markers.markers.insert(markers.markers.begin(), full_trajectory_markers_.markers.begin(), full_trajectory_markers_.markers.end());
+    marker_publisher_->msg_ = markers;
+    marker_publisher_->unlockAndPublish();
+  }
+}
+
+void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency)
+{
+  visualization_msgs::MarkerArray markers;
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = "panda_link0";
+  marker.header.stamp = ros::Time::now();
+  marker.type = visualization_msgs::Marker::SPHERE;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.scale.x = 0.01;
+  marker.scale.y = 0.01;
+  marker.scale.z = 0.01;
+  marker.color.a = 0.7;
+  marker.color.r = 0.0;
+  marker.color.g = 0.0;
+  marker.color.b = 1.0;
+
+  Eigen::Vector3d translation;
+  for (int i = 0; i < trajectory.rows(); i+=frequency)
+  {
+    forwardKinematics(trajectory.row(i).transpose(), translation);
+    marker.id = i;
+    marker.pose.position.x = translation(0);
+    marker.pose.position.y = translation(1);
+    marker.pose.position.z = translation(2);
+    markers.markers.push_back(marker);
+  }
+  full_trajectory_markers_ = markers;
+}
+
+Eigen::Matrix<double, 7, 4> ShyController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
+{
+  // Create DH parameters (data given by maker franka-emika)
+  dh <<   0,      0,        0.333,   joint_variable(0, 0),
+       -M_PI/2,   0,        0,       joint_variable(1, 0),
+        M_PI/2,   0,        0.316,   joint_variable(2, 0),
+        M_PI/2,   0.0825,   0,       joint_variable(3, 0),
+       -M_PI/2,  -0.0825,   0.384,   joint_variable(4, 0),
+        M_PI/2,   0,        0,       joint_variable(5, 0),
+        M_PI/2,   0.088,    0.107,   joint_variable(6, 0);
+
+  return dh;
+}
+
+Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh) 
+{
+  double alpha = dh(i, 0);
+  double a = dh(i, 1);
+  double d = dh(i, 2);
+  double q = dh(i, 3);
+
+  Eigen::Matrix4d TF;
+  TF << cos(q), -sin(q), 0, a,
+        sin(q) * cos(alpha), cos(q) * cos(alpha), -sin(alpha), -sin(alpha) * d,
+        sin(q) * sin(alpha), cos(q) * sin(alpha), cos(alpha), cos(alpha) * d,
+        0, 0, 0, 1;
+  return TF;
+}
+
+void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation)
+{
+  Eigen::Matrix<double, 7, 4> dh_parameters = dh_params(joint_pose);
+
+  Eigen::Matrix4d T_01 = TF_matrix(0, dh_parameters);
+  Eigen::Matrix4d T_12 = TF_matrix(1, dh_parameters);
+  Eigen::Matrix4d T_23 = TF_matrix(2, dh_parameters);
+  Eigen::Matrix4d T_34 = TF_matrix(3, dh_parameters);
+  Eigen::Matrix4d T_45 = TF_matrix(4, dh_parameters);
+  Eigen::Matrix4d T_56 = TF_matrix(5, dh_parameters);
+  Eigen::Matrix4d T_67 = TF_matrix(6, dh_parameters);
+
+  Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
+
+  // Assume quaternion_from_matrix and translation_from_matrix functions exist
+  //Eigen::Quaterniond quaternions = quaternion_from_matrix(T_07);
+  translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
 }
 
 

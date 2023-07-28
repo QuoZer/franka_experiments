@@ -100,17 +100,24 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void trajectoryCallback(const moveit_msgs::DisplayTrajectory::ConstPtr& msg);
   /* Trajectory action CB */
   virtual void goalCB(GoalHandle gh);
-  virtual void cancelCB(GoalHandle gh);
   /* Cancel the active goal */
+  virtual void cancelCB(GoalHandle gh);
   virtual void preemptActiveGoal();
   /* Form and send action feedback TODO */
   void setActionFeedback(State& desired_state, State& current_state);
   /* Send updated trajectory visualization */
   void publishTrajectoryMarkers(Eigen::MatrixXd& trajectory);
+  /* Fill a full original trajectory marker vector */
+  void fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency);
 
+  // Viz markers
+  visualization_msgs::MarkerArray full_trajectory_markers_;
   Eigen::Matrix<double, 7, 4> dh;
+  /* Calc DH matrix for the given configuration */
   Eigen::Matrix<double, 7, 4> dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable);
+  /* Calc transformation matrix for the input joint */
   Eigen::Matrix4d TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh);
+  /* Get translation vector from the given configuration */
   void forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation);
 
   // time structures
