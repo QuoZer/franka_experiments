@@ -405,7 +405,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_times = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
   if (trajectory_deformed_length != trajectory_deformed_length_target_) {
-    trajectory_deformed_length = trajectory_deformed_length_target_;
+    trajectory_deformed_length = std::min(trajectory_deformed_length_target_, trajectory_length);
     precompute();
   }
     
