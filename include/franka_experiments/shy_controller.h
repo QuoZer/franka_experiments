@@ -170,12 +170,12 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // PARAMETERS`
   Eigen::MatrixXd k_gains_;
   Eigen::MatrixXd d_gains_;
-  double admittance = 0;                   // nu  
+  double admittance = 0;                    // nu  
   double admittance_target_ = 0;            // nu for dynamic reconf
   std::mutex admittance_mutex_;
-  int trajectory_deformed_length = 1;      // N, samples
+  int trajectory_deformed_length = 1;         // N, samples
   int trajectory_deformed_length_target_ = 1; // N for dynamic reconf
-  int time_scaling_factor = 1;             // HACK to reduce velocity
+  int time_scaling_factor = 1;                // HACK to reduce velocity
   double coriolis_factor_{1.0};
 
   double filter_params_{0.005};

@@ -20,9 +20,6 @@ namespace franka_example_controllers {
 
 bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
                                                ros::NodeHandle& node_handle) {
-  std::vector<double> cartesian_stiffness_vector;
-  std::vector<double> cartesian_damping_vector;
-
   // save nh
   controller_nh_ = node_handle;
 
@@ -421,6 +418,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
       if (i < trajectory_deformed_length)
         trajectory_frame_positions(i, j) = traj.points[i].positions[j];
     }
+    // filling with time differences
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = traj.points[i].time_from_start.toNSec();
   }
