@@ -188,13 +188,13 @@ void ShyController::precompute()
     // method from "Trajectory Deformations from Physical Human-Robot Interaction"
     // minimum jerk trajectory model matrix
     A = Eigen::MatrixXd::Zero(N + 3, N);
-    // // Fill diagonal with 1s
+    // Fill diagonal with 1s
     A.diagonal(0).setConstant(1);
-    // // Fill the diagonal below it with -3
+    // Fill the diagonal below it with -3
     A.diagonal(-1).setConstant(-3);
-    // // Fill the diagonal below -3 with 3
+    // Fill the diagonal below -3 with 3
     A.diagonal(-2).setConstant(3);
-    // // Fill the diagonal below 3 with -1
+    // Fill the diagonal below 3 with -1
     A.diagonal(-3).setConstant(-1);
     
     R = A.transpose() * A;
@@ -208,8 +208,8 @@ void ShyController::precompute()
     G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
     H = std::sqrt(N) * G / G.norm();    
-
   #endif
+
   ROS_INFO("Finished precompute");
 }
 
@@ -384,6 +384,8 @@ Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
   return tau_d_saturated;
 }
 
+// Callback functions are below 
+
 void  ShyController::complianceParamCallback(
     franka_experiments::compliance_paramConfig& config,
     uint32_t /*level*/) {
@@ -515,6 +517,8 @@ inline void ShyController::preemptActiveGoal()
     current_active_goal->gh_.setCanceled();
   }
 }
+
+// Visualization related things below 
 
 void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
 {
