@@ -502,6 +502,7 @@ void ShyController::cancelCB(GoalHandle gh)
 
     // Mark the current goal as canceled
     current_active_goal->gh_.setCanceled();
+    this->startRequest(gh.getGoal()->trajectory.header.stamp);    // not sure about the argument
   }
 }
 
