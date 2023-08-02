@@ -24,4 +24,4 @@ Repo for Aalto University summer internship on human-robot interaction.
   - *deformation_length* - the higher the longer is the deformation segment. 
   - *maximum_waypoint_distance / minimum_waypoint_count* of OMPL - set to increase trajectory resolution (doesn't seem to affect cartesian trajectories). 
   - *velocity_scaling* of motion planning in rviz - set to more comfortable for experiments values. 
-  - *impendance gains* of the robot - the softer the gains the easier it is to push the robot around and the higher is external force noise. 
+  - *impendance gains* of the robot - the softer the gains the easier it is to push the robot around and the higher is the external force noise.  
