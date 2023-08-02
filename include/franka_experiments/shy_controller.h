@@ -173,8 +173,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   double admittance = 0;                    // nu  
   double admittance_target_ = 0;            // nu for dynamic reconf
   std::mutex admittance_mutex_;
-  int trajectory_deformed_length = 5;         // N, number of samples
-  double trajectory_deformed_length_target_ = 1; // N for dynamic reconf
+  int deformed_segment_length = 5;         // N, number of samples
+  double deformed_segment_ratio_target_ = 1; // N for dynamic reconf
   int time_scaling_factor = 1;                // HACK to reduce velocity
   double coriolis_factor_{1.0};
 
