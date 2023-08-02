@@ -161,13 +161,14 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   haveTrajectory = false; // to be sure
   fast_index = -1;
   slow_index = -1;
-  precompute();
+  int N = std::max(10, static_cast<int>(std::floor(trajectory_length*trajectory_deformed_length_target_)));
+  precompute(N);
 }
 
-void ShyController::precompute()
+void ShyController::precompute(int N)
 {
   // Deformations precompute
-  int N = trajectory_deformed_length;
+  //int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
@@ -396,16 +397,15 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   num_of_joints = traj.joint_names.size();
   trajectory_length = traj.points.size();
   // Convert to eigen
-  trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
-  trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  trajectory_times = Eigen::MatrixXi(trajectory_length, 1); 
+  trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
-  if (trajectory_deformed_length != trajectory_deformed_length_target_) {
-    trajectory_deformed_length = std::min(trajectory_deformed_length_target_, trajectory_length);
-    precompute();
-  }
-    
+  trajectory_deformed_length = static_cast<int>(std::floor(trajectory_length*trajectory_deformed_length_target_));
+  trajectory_deformed_length = std::max(10, trajectory_deformed_length);    // we need some points anyway
+  precompute(trajectory_deformed_length); 
+  
   trajectory_frame_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
   
   // probably can be done in a more efficient way
