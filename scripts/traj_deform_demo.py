@@ -51,7 +51,7 @@ def get_deform_vector(N, method):
         # Initialize a matrix filled with zeros
         A = np.zeros((N+3, N))
 
-        # Fill diagonals
+        # Fill diagonals (min jerk diff matrix)
         np.fill_diagonal(A, 1)
         np.fill_diagonal(A[1:], -3)
         np.fill_diagonal(A[2:], 3)

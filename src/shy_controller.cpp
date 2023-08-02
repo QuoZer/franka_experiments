@@ -299,7 +299,7 @@ void  ShyController::update(const ros::Time& time,
     desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
     desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
 
-    //setActionFeedback(desired_state, current_state);
+    setActionFeedback(desired_state, current_state);
 
     publishTrajectoryMarkers(trajectory_frame_positions);
   } // end traj deform
@@ -626,8 +626,6 @@ void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_p
 
   Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
 
-  // Assume quaternion_from_matrix and translation_from_matrix functions exist
-  //Eigen::Quaterniond quaternions = quaternion_from_matrix(T_07);
   translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
 }
 
