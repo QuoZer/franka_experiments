@@ -20,9 +20,6 @@ namespace franka_example_controllers {
 
 bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
                                                ros::NodeHandle& node_handle) {
-  std::vector<double> cartesian_stiffness_vector;
-  std::vector<double> cartesian_damping_vector;
-
   // save nh
   controller_nh_ = node_handle;
 
@@ -43,7 +40,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
 
-  if (!node_handle.getParam("trajectory_deformed_length", trajectory_deformed_length)) {
+  if (!node_handle.getParam("trajectory_deformed_length", deformed_segment_length)) {
     ROS_ERROR_STREAM(" ShyController: Could not read parameter trajectory_deformed_length");
     return false;
   }
@@ -164,13 +161,14 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   haveTrajectory = false; // to be sure
   fast_index = -1;
   slow_index = -1;
-  precompute();
+  int N = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
+  precompute(N);
 }
 
-void ShyController::precompute()
+void ShyController::precompute(int N)
 {
   // Deformations precompute
-  int N = trajectory_deformed_length;
+  //int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
@@ -277,10 +275,10 @@ void  ShyController::update(const ros::Time& time,
     // and add new new waypoint to the end
     trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
         trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
-    if (slow_index+trajectory_deformed_length < trajectory_length)
-      trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(slow_index+trajectory_deformed_length);
+    if (slow_index+deformed_segment_length < trajectory_length)
+      trajectory_frame_positions.row(deformed_segment_length-1) = trajectory_positions.row(slow_index+deformed_segment_length);
     else
-      trajectory_frame_positions.row(trajectory_deformed_length-1) = trajectory_positions.row(trajectory_length-1);
+      trajectory_frame_positions.row(deformed_segment_length-1) = trajectory_positions.row(trajectory_length-1);
     
     // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
@@ -302,7 +300,7 @@ void  ShyController::update(const ros::Time& time,
     desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
     desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
 
-    //setActionFeedback(desired_state, current_state);
+    setActionFeedback(desired_state, current_state);
 
     publishTrajectoryMarkers(trajectory_frame_positions);
   } // end traj deform
@@ -391,7 +389,7 @@ void  ShyController::complianceParamCallback(
     uint32_t /*level*/) {
   std::lock_guard<std::mutex> lock(admittance_mutex_);
   admittance_target_ = config.admittance;
-  trajectory_deformed_length_target_ = config.deformed_length;
+  deformed_segment_ratio_target_ = config.deformed_length;
 }
 
 void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj)
@@ -399,17 +397,16 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   num_of_joints = traj.joint_names.size();
   trajectory_length = traj.points.size();
   // Convert to eigen
-  trajectory_positions = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
-  trajectory_velocities = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  trajectory_times = Eigen::MatrixXi(trajectory_length, 1); 
+  trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
+  trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
-  if (trajectory_deformed_length != trajectory_deformed_length_target_) {
-    trajectory_deformed_length = trajectory_deformed_length_target_;
-    precompute();
-  }
-    
-  trajectory_frame_positions = Eigen::MatrixXd(trajectory_deformed_length, num_of_joints);
+  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_));
+  deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
+  precompute(deformed_segment_length); 
+  
+  trajectory_frame_positions = Eigen::MatrixXd(deformed_segment_length, num_of_joints);
   
   // probably can be done in a more efficient way
   int prev_ts = 0;
@@ -418,9 +415,10 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
       trajectory_positions(i, j) = traj.points[i].positions[j];
       trajectory_velocities(i, j) = traj.points[i].velocities[j];
       // also copy the first N waypoints to trajectory_deform
-      if (i < trajectory_deformed_length)
+      if (i < deformed_segment_length)
         trajectory_frame_positions(i, j) = traj.points[i].positions[j];
     }
+    // filling with time differences
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = traj.points[i].time_from_start.toNSec();
   }
@@ -428,7 +426,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   fillFullTrajectoryMarkers(trajectory_positions, 4);
 
   ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
-                 trajectory_length, trajectory_deformed_length, admittance);
+                 trajectory_length, deformed_segment_length, admittance);
 }
 
 void  ShyController::trajectoryCallback(
@@ -628,8 +626,6 @@ void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_p
 
   Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
 
-  // Assume quaternion_from_matrix and translation_from_matrix functions exist
-  //Eigen::Quaterniond quaternions = quaternion_from_matrix(T_07);
   translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
 }
 
