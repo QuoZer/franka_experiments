@@ -254,33 +254,26 @@ void  ShyController::update(const ros::Time& time,
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
+    precompute(deformed_segment_length);
+    // Nx7 = 1x1 * Nx1 * 1x7
+    segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+
+    int remaining_size = trajectory_deformation.rows() - slow_index;
+    int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
     
-    #ifdef ALT_METHOD
-      Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
-      // Nx7 = 1x1 * NxN * Nx7
-      trajectory_deformation_ = admittance * H * Uh;
-    #else
-      // Nx7 = 1x1 * Nx1 * 1x7
-      trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
-    #endif
-    trajectory_frame_positions -= trajectory_deformation_;
+    // Additions to the map object are reflected in the original matrix
+    Eigen::Map<Eigen::MatrixXd> sub_vector(trajectory_deformation.data() + slow_index, short_vector_effective_size, 1);
+    sub_vector -= segment_deformation.topRows(short_vector_effective_size);
+
     
     // update q_d and qd_d
-    q_d = trajectory_frame_positions.row(0);
-    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
+    q_d = trajectory_positions.row(slow_index) + trajectory_deformation.row(slow_index);
+    delta_q = trajectory_positions.row(slow_index+1) + trajectory_deformation.row(slow_index+1) - q_d;    // ugly and probably dangerous
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
-    // shift the deformation window one step 
-    // and add new new waypoint to the end
-    trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
-        trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
-    if (slow_index+deformed_segment_length < trajectory_length)
-      trajectory_frame_positions.row(deformed_segment_length-1) = trajectory_positions.row(slow_index+deformed_segment_length);
-    else
-      trajectory_frame_positions.row(deformed_segment_length-1) = trajectory_positions.row(trajectory_length-1);
     
     // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
@@ -304,11 +297,11 @@ void  ShyController::update(const ros::Time& time,
 
     setActionFeedback(desired_state, current_state);
 
-    publishTrajectoryMarkers(trajectory_frame_positions);
+    publishTrajectoryMarkers(trajectory_positions);
   } // end traj deform
   
   // sanity check
-  if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
+  if (!(trajectory_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
   {
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
@@ -400,7 +393,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_length = traj.points.size();
   // Convert to eigen
   trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
+  segment_deformation = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
@@ -408,7 +401,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
   precompute(deformed_segment_length); 
   
-  trajectory_frame_positions = Eigen::MatrixXd(deformed_segment_length, num_of_joints);
+  trajectory_deformation = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   
   // probably can be done in a more efficient way
   int prev_ts = 0;
@@ -417,8 +410,6 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
       trajectory_positions(i, j) = traj.points[i].positions[j];
       trajectory_velocities(i, j) = traj.points[i].velocities[j];
       // also copy the first N waypoints to trajectory_deform
-      if (i < deformed_segment_length)
-        trajectory_frame_positions(i, j) = traj.points[i].positions[j];
     }
     // filling with time differences
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);

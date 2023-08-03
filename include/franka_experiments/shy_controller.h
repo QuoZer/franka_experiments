@@ -152,8 +152,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::MatrixXd trajectory_velocities;
   Eigen::MatrixXi trajectory_times;
   // deformed trajectory eigen data
-  Eigen::MatrixXd trajectory_frame_positions;
-  Eigen::MatrixXd trajectory_deformation_;
+  Eigen::MatrixXd trajectory_deformation;
+  Eigen::MatrixXd segment_deformation;
   // trajectory deformation matrixes
   Eigen::MatrixXd A;                    // minimum jerk trajectory model matrix
   Eigen::MatrixXd R;
