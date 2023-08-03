@@ -19,12 +19,12 @@
 namespace franka_example_controllers {
 
 bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
-                                               ros::NodeHandle& node_handle) {
+                                      ros::NodeHandle& node_handle) {
   // save nh
   controller_nh_ = node_handle;
 
   sub_trajectory_ = node_handle.subscribe(
-      "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,
+      "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
       ros::TransportHints().reliable().tcpNoDelay());
 
   std::string arm_id;
@@ -99,7 +99,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
         << ex.what());
     return false;
   }
-
+  
   auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
   if (effort_joint_interface == nullptr) {
     ROS_ERROR_STREAM(
@@ -145,6 +145,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
 
 void  ShyController::starting(const ros::Time& /*time*/) {
   franka::RobotState initial_state = state_handle_->getRobotState();
+  
   // get jacobian
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
@@ -226,6 +227,7 @@ void  ShyController::update(const ros::Time& time,
   std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
+
       
   // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
   State desired_state;  
