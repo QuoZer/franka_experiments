@@ -139,6 +139,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // Trajectory deformation stuff
   std::string robot_model_ = "panda";
   bool haveTrajectory = false; 
+  bool precompute_flag = true;
   int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
   int trajectory_length = 0;            // samples  
