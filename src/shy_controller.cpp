@@ -358,14 +358,14 @@ void ShyController::setActionFeedback(State& desired_state, State& current_state
     return;
   }
   
-  current_active_goal->preallocated_feedback_->header.stamp          = time_data_.readFromRT()->time;
-  current_active_goal->preallocated_feedback_->desired.positions     = desired_state.position;
-  current_active_goal->preallocated_feedback_->desired.velocities    = desired_state.velocity;
-  current_active_goal->preallocated_feedback_->desired.accelerations = desired_state.acceleration;
+  current_active_goal->preallocated_feedback_->header.stamp            = time_data_.readFromRT()->time;
+  current_active_goal->preallocated_feedback_->desired.positions       = desired_state.position;
+  current_active_goal->preallocated_feedback_->desired.velocities      = desired_state.velocity;
+  current_active_goal->preallocated_feedback_->desired.accelerations   = desired_state.acceleration;
   current_active_goal->preallocated_feedback_->desired.time_from_start = desired_state.time_from_start;
-  current_active_goal->preallocated_feedback_->actual.positions      = current_state.position;
-  current_active_goal->preallocated_feedback_->actual.velocities     = current_state.velocity;
-  current_active_goal->preallocated_feedback_->actual.time_from_start = current_state.time_from_start;
+  current_active_goal->preallocated_feedback_->actual.positions        = current_state.position;
+  current_active_goal->preallocated_feedback_->actual.velocities       = current_state.velocity;
+  current_active_goal->preallocated_feedback_->actual.time_from_start  = current_state.time_from_start;
   // current_active_goal->preallocated_feedback_->error.positions       = state_error_.position;
   // current_active_goal->preallocated_feedback_->error.velocities      = state_error_.velocity;
   // current_active_goal->preallocated_feedback_->error.time_from_start = ros::Duration(state_error_.time_from_start);
