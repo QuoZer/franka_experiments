@@ -209,7 +209,7 @@ void ShyController::precompute(int N)
     H = std::sqrt(N) * G / G.norm();    
   #endif
 
-  ROS_INFO("Finished precompute");
+  // ROS_INFO("Finished precompute");
 }
 
 void  ShyController::update(const ros::Time& time,
@@ -254,6 +254,8 @@ void  ShyController::update(const ros::Time& time,
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
+    // testing with regular recompute
+    precompute(trajectory_length*deformed_segment_ratio_target_);
     
     #ifdef ALT_METHOD
       Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
