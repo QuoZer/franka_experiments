@@ -244,6 +244,13 @@ void  ShyController::update(const ros::Time& time,
   Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
 
   // TRAJECTORY DEFORMATION
+  if (precompute_flag)
+  {
+    int N = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)))); 
+    // testing with regular recompute
+    precompute(N);
+    precompute_flag = false;
+  }
   if (haveTrajectory) {
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
@@ -254,8 +261,6 @@ void  ShyController::update(const ros::Time& time,
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
-    // testing with regular recompute
-    precompute(trajectory_length*deformed_segment_ratio_target_);
     
     #ifdef ALT_METHOD
       Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
@@ -307,6 +312,8 @@ void  ShyController::update(const ros::Time& time,
     setActionFeedback(desired_state, current_state);
 
     publishTrajectoryMarkers(trajectory_frame_positions);
+
+    precompute_flag = true; // scheduling precompute to the next update
   } // end traj deform
   
   // sanity check
