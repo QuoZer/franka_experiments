@@ -393,7 +393,8 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_length = traj.points.size();
   // Convert to eigen
   trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  segment_deformation = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
+  segment_deformation     = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
+  trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
@@ -401,7 +402,6 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
   precompute(deformed_segment_length); 
   
-  trajectory_deformation = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   
   // probably can be done in a more efficient way
   int prev_ts = 0;
