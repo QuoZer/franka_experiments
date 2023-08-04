@@ -162,8 +162,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   haveTrajectory = false; // to be sure
   fast_index = -1;
   slow_index = -1;
-  int N = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
-  precompute(N);
+  precompute(10);
 }
 
 void ShyController::precompute(int N)
@@ -246,9 +245,15 @@ void  ShyController::update(const ros::Time& time,
   // TRAJECTORY DEFORMATION
   if (precompute_flag)
   {
-    int N = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)))); 
+    // update parameters changed online through dynamic reconfigure 
+    std::lock_guard<std::mutex> lock(admittance_mutex_);
+    admittance = admittance_target_;
+    deformed_segment_ratio = deformed_segment_ratio_target_;
+    lock.~lock_guard();
+
+    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
     // testing with regular recompute
-    precompute(N);
+    precompute(deformed_segment_length);
     precompute_flag = false;
   }
   if (haveTrajectory) {
@@ -347,9 +352,6 @@ void  ShyController::update(const ros::Time& time,
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
 
-  // update parameters changed online through dynamic reconfigure 
-  std::lock_guard<std::mutex> lock(admittance_mutex_);
-  admittance = admittance_target_;
 }  // end update()
 
 void ShyController::stopping(const ros::Time& /*time*/)
@@ -413,7 +415,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
-  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_));
+  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_length));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
   precompute(deformed_segment_length); 
   
