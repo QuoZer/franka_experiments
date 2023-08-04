@@ -138,7 +138,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   
   // Trajectory deformation stuff
   std::string robot_model_ = "panda";
-  bool haveTrajectory = false; 
+  bool have_trajectory = false; 
+  bool need_recompute = true;
   int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
   int trajectory_length = 0;            // samples  
@@ -174,7 +175,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   double admittance_target_ = 0;            // nu for dynamic reconf
   std::mutex admittance_mutex_;
   int deformed_segment_length = 5;         // N, number of samples
-  double deformed_segment_ratio_target_ = 1; // N for dynamic reconf
+  double deformed_segment_ratio_target_ = 0.1; // N for dynamic reconf
+  double deformed_segment_ratio = 0.1;
   int time_scaling_factor = 1;                // HACK to reduce velocity
   double coriolis_factor_{1.0};
 
