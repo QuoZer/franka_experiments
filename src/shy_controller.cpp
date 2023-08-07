@@ -272,7 +272,7 @@ void  ShyController::update(const ros::Time& time,
 
     // update q_d and qd_d
     q_d = trajectory_positions.row(slow_index) - trajectory_deformation.row(slow_index);
-    delta_q = trajectory_positions.row(slow_index+1) - trajectory_deformation.row(slow_index+1) - trajectory_positions.row(slow_index) + trajectory_deformation.row(slow_index);;    // ugly and probably dangerous
+    delta_q = trajectory_positions.row(slow_index+1) - trajectory_deformation.row(slow_index+1) - q_d.transpose().row(0);    // ugly and probably dangerous
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
