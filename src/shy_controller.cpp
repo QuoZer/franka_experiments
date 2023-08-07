@@ -535,9 +535,10 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
     marker.color.b = 0.0;
 
     Eigen::Vector3d translation;
+    Eigen::MatrixXd q_def = Eigen::MatrixXd::Zero(1, 7);
     for (int i = 0; i < trajectory.rows(); i++)
     {
-      Eigen::MatrixXd q_def = trajectory.row(i) - trajectory_deformation.row(i);
+      q_def = trajectory.row(i) - trajectory_deformation.row(i);
       forwardKinematics(q_def.transpose(), translation);
       marker.id = i;
       marker.pose.position.x = translation(0);
