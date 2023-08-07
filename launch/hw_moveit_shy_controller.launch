@@ -24,6 +24,7 @@
   <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true">
     <!-- robot description is loaded by franka_control.launch -->
     <arg name="load_robot_description" value="false" />
+    <!-- <arg name="pipeline" value="pilz_industrial_motion_planner" /> -->
     <!-- MoveItSimpleControllerManager provides ros_control's JointTrajectory controllers
          as well as GripperCommand actions -->
     <arg name="moveit_controller_manager" value="simple" />

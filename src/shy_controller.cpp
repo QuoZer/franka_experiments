@@ -199,8 +199,7 @@ void ShyController::precompute(int N)
 
   H = std::sqrt(N) * G / G.norm();    
 
-
-  //ROS_INFO("Finished precompute");
+  // ROS_INFO("Finished precompute");
 }
 
 void  ShyController::update(const ros::Time& time,
@@ -237,6 +236,14 @@ void  ShyController::update(const ros::Time& time,
   // TRAJECTORY DEFORMATION
   if (need_recompute)
   {
+    // update parameters changed online through dynamic reconfigure 
+    std::lock_guard<std::mutex> lock(admittance_mutex_);
+    admittance = admittance_target_;
+    deformed_segment_ratio = deformed_segment_ratio_target_;
+    lock.~lock_guard();
+
+    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
+    // testing with regular recompute
     precompute(deformed_segment_length);
     need_recompute = false;
   }
@@ -329,11 +336,11 @@ void  ShyController::update(const ros::Time& time,
   }
 
   // update parameters changed online through dynamic reconfigure 
-  std::lock_guard<std::mutex> lock(admittance_mutex_);
-  admittance = admittance_target_;
-  deformed_segment_ratio = deformed_segment_ratio_target_;
+  // std::lock_guard<std::mutex> lock(admittance_mutex_);
+  // admittance = admittance_target_;
+  // deformed_segment_ratio = deformed_segment_ratio_target_;
 
-  deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
+  // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
 
 void ShyController::stopping(const ros::Time& /*time*/)
@@ -349,14 +356,14 @@ void ShyController::setActionFeedback(State& desired_state, State& current_state
     return;
   }
   
-  current_active_goal->preallocated_feedback_->header.stamp          = time_data_.readFromRT()->time;
-  current_active_goal->preallocated_feedback_->desired.positions     = desired_state.position;
-  current_active_goal->preallocated_feedback_->desired.velocities    = desired_state.velocity;
-  current_active_goal->preallocated_feedback_->desired.accelerations = desired_state.acceleration;
+  current_active_goal->preallocated_feedback_->header.stamp            = time_data_.readFromRT()->time;
+  current_active_goal->preallocated_feedback_->desired.positions       = desired_state.position;
+  current_active_goal->preallocated_feedback_->desired.velocities      = desired_state.velocity;
+  current_active_goal->preallocated_feedback_->desired.accelerations   = desired_state.acceleration;
   current_active_goal->preallocated_feedback_->desired.time_from_start = desired_state.time_from_start;
-  current_active_goal->preallocated_feedback_->actual.positions      = current_state.position;
-  current_active_goal->preallocated_feedback_->actual.velocities     = current_state.velocity;
-  current_active_goal->preallocated_feedback_->actual.time_from_start = current_state.time_from_start;
+  current_active_goal->preallocated_feedback_->actual.positions        = current_state.position;
+  current_active_goal->preallocated_feedback_->actual.velocities       = current_state.velocity;
+  current_active_goal->preallocated_feedback_->actual.time_from_start  = current_state.time_from_start;
   // current_active_goal->preallocated_feedback_->error.positions       = state_error_.position;
   // current_active_goal->preallocated_feedback_->error.velocities      = state_error_.velocity;
   // current_active_goal->preallocated_feedback_->error.time_from_start = ros::Duration(state_error_.time_from_start);
@@ -398,7 +405,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
-  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_));
+  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_length));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
   precompute(deformed_segment_length); 
   
