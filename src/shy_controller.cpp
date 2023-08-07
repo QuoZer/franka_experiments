@@ -174,8 +174,8 @@ void ShyController::precompute(int N)
   //int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
+  segment_deformation     = Eigen::MatrixXd::Zero(N, num_of_joints);
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
-  dq_filtered_.fill(0);   // init with zeros
 
   // method from "Trajectory Deformations from Physical Human-Robot Interaction"
   // minimum jerk trajectory model matrix
@@ -238,11 +238,10 @@ void  ShyController::update(const ros::Time& time,
   // TRAJECTORY DEFORMATION
   if (need_recompute)
   {
-    // update parameters changed online through dynamic reconfigure 
-    std::lock_guard<std::mutex> lock(admittance_mutex_);
-    admittance = admittance_target_;
-    deformed_segment_ratio = deformed_segment_ratio_target_;
-    //lock.~lock_guard();
+    // // update parameters changed online through dynamic reconfigure 
+    // std::lock_guard<std::mutex> lock(admittance_mutex_);
+    // admittance = admittance_target_;
+    // deformed_segment_ratio = deformed_segment_ratio_target_;
 
     deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
     // testing with regular recompute
@@ -261,7 +260,7 @@ void  ShyController::update(const ros::Time& time,
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
     // Nx7 = 1x1 * Nx1 * 1x7
-    segment_deformation = -admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+    segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
 
     int remaining_size = trajectory_deformation.rows() - slow_index;
     int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
@@ -303,7 +302,7 @@ void  ShyController::update(const ros::Time& time,
 
     publishTrajectoryMarkers(trajectory_positions);
 
-    need_recompute = true;
+    //need_recompute = true;
   } // end traj deform
   
   // sanity check
@@ -338,9 +337,10 @@ void  ShyController::update(const ros::Time& time,
   }
 
   // update parameters changed online through dynamic reconfigure 
-  // std::lock_guard<std::mutex> lock(admittance_mutex_);
-  // admittance = admittance_target_;
-  // deformed_segment_ratio = deformed_segment_ratio_target_;
+  std::lock_guard<std::mutex> lock(admittance_mutex_);
+  admittance = admittance_target_;
+  if (deformed_segment_ratio != deformed_segment_ratio_target_) need_recompute = true;
+  deformed_segment_ratio = deformed_segment_ratio_target_;
 
   // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
@@ -402,10 +402,10 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_length = traj.points.size();
   // Convert to eigen
   trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  segment_deformation     = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
+  
   // update from dynamic reconfigure
   deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
