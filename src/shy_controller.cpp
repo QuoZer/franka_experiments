@@ -164,6 +164,8 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   slow_index = -1;
   deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
   precompute(deformed_segment_length);
+
+  ROS_INFO("ShyController: Starting controller");
 }
 
 void ShyController::precompute(int N)
@@ -240,7 +242,7 @@ void  ShyController::update(const ros::Time& time,
     std::lock_guard<std::mutex> lock(admittance_mutex_);
     admittance = admittance_target_;
     deformed_segment_ratio = deformed_segment_ratio_target_;
-    lock.~lock_guard();
+    //lock.~lock_guard();
 
     deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
     // testing with regular recompute
