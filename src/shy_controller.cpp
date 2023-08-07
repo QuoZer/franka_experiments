@@ -243,19 +243,6 @@ void  ShyController::update(const ros::Time& time,
   Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
 
   // TRAJECTORY DEFORMATION
-  if (precompute_flag)
-  {
-    // update parameters changed online through dynamic reconfigure 
-    std::lock_guard<std::mutex> lock(admittance_mutex_);
-    admittance = admittance_target_;
-    deformed_segment_ratio = deformed_segment_ratio_target_;
-    lock.~lock_guard();
-
-    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
-    // testing with regular recompute
-    precompute(deformed_segment_length);
-    precompute_flag = false;
-  }
   if (haveTrajectory) {
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
@@ -317,8 +304,6 @@ void  ShyController::update(const ros::Time& time,
     setActionFeedback(desired_state, current_state);
 
     publishTrajectoryMarkers(trajectory_frame_positions);
-
-    precompute_flag = true; // scheduling precompute to the next update
   } // end traj deform
   
   // sanity check
@@ -352,6 +337,9 @@ void  ShyController::update(const ros::Time& time,
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
 
+  std::lock_guard<std::mutex> lock(admittance_mutex_);
+  admittance = admittance_target_;
+  deformed_segment_ratio = deformed_segment_ratio_target_;
 }  // end update()
 
 void ShyController::stopping(const ros::Time& /*time*/)
@@ -415,7 +403,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   // update from dynamic reconfigure
-  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_length));
+  deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
   precompute(deformed_segment_length); 
   
@@ -593,6 +581,7 @@ void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int f
     marker.pose.position.z = translation(2);
     markers.markers.push_back(marker);
   }
+  full_trajectory_markers_.markers.clear();
   full_trajectory_markers_ = markers;
 }
 

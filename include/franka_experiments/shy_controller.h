@@ -133,13 +133,12 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::vector<hardware_interface::JointHandle> joint_handles_;
   
   // Trajectory action stuff 
-  ActionServerPtr    action_server_;
-  RealtimeGoalHandlePtr     rt_active_goal_;     ///< Currently active action goal, if any.
+  ActionServerPtr       action_server_;
+  RealtimeGoalHandlePtr rt_active_goal_;     ///< Currently active action goal, if any.
   
   // Trajectory deformation stuff
   std::string robot_model_ = "panda";
   bool haveTrajectory = false; 
-  bool precompute_flag = true;
   int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
   int trajectory_length = 0;            // samples  
@@ -171,9 +170,9 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   // PARAMETERS`
   Eigen::MatrixXd k_gains_;
   Eigen::MatrixXd d_gains_;
+  std::mutex admittance_mutex_;
   double admittance = 0;                    // nu  
   double admittance_target_ = 0;            // nu for dynamic reconf
-  std::mutex admittance_mutex_;
   int deformed_segment_length = 5;            // N, number of samples
   double deformed_segment_ratio_target_ = 0.1; // N for dynamic reconf
   double deformed_segment_ratio = 0.1;        // N for dynamic reconf
