@@ -253,6 +253,10 @@ void  ShyController::update(const ros::Time& time,
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
     // Nx7 = 1x1 * Nx1 * 1x7
+    if (segment_deformation.rows() !=  H.rows() ) {
+      ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
+    }
+
     segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
 
     int remaining_size = trajectory_deformation.rows() - slow_index;
@@ -555,6 +559,16 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
 
       markers.markers.push_back(marker);
     }
+    marker.id = trajectory.rows();
+    marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    std::ostringstream oss;
+    oss << "Admittance: " << admittance << " \nDeformation length: " << deformed_segment_length;
+    marker.text = oss.str();
+    marker.pose.position.x = 0;
+    marker.pose.position.y = 0;
+    marker.pose.position.z = 1;
+    marker.scale.z = 0.1;
+    markers.markers.push_back(marker);
     // Append full trajectory markers
     markers.markers.insert(markers.markers.end(), full_trajectory_markers_.markers.begin(), full_trajectory_markers_.markers.end());
     if (slow_index == trajectory_length - 1) markers.markers.clear(); // clear markers if trajectory is finished
