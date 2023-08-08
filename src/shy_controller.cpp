@@ -220,7 +220,6 @@ void  ShyController::update(const ros::Time& time,
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
 
-      
   // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
   State desired_state;  
   State current_state;
@@ -235,19 +234,13 @@ void  ShyController::update(const ros::Time& time,
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
 
-  // TRAJECTORY DEFORMATION
-  if (need_recompute)
-  {
-    // // update parameters changed online through dynamic reconfigure 
-    // std::lock_guard<std::mutex> lock(admittance_mutex_);
-    // admittance = admittance_target_;
-    // deformed_segment_ratio = deformed_segment_ratio_target_;
+  // update parameters changed online through dynamic reconfigure 
+  std::lock_guard<std::mutex> lock(admittance_mutex_);
+  admittance = admittance_target_;
+  if (deformed_segment_ratio != deformed_segment_ratio_target_) need_recompute = true;
+  deformed_segment_ratio = deformed_segment_ratio_target_;
 
-    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
-    // testing with regular recompute
-    precompute(deformed_segment_length);
-    need_recompute = false;
-  }
+  // TRAJECTORY DEFORMATION
   if (have_trajectory) {
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
@@ -304,6 +297,13 @@ void  ShyController::update(const ros::Time& time,
 
     //need_recompute = true;
   } // end traj deform
+  else if (need_recompute)  // updating deformation matrix only when no deformation takes place
+  {
+    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
+    // testing with regular recompute
+    precompute(deformed_segment_length);
+    need_recompute = false;
+  }
   
   // sanity check
   if (!(trajectory_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
@@ -335,12 +335,6 @@ void  ShyController::update(const ros::Time& time,
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
-
-  // update parameters changed online through dynamic reconfigure 
-  std::lock_guard<std::mutex> lock(admittance_mutex_);
-  admittance = admittance_target_;
-  if (deformed_segment_ratio != deformed_segment_ratio_target_) need_recompute = true;
-  deformed_segment_ratio = deformed_segment_ratio_target_;
 
   // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
@@ -409,7 +403,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   // update from dynamic reconfigure
   deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
-  precompute(deformed_segment_length); 
+  precompute(deformed_segment_length);    // just set the flag and let the update() do the job ???
   
   
   // probably can be done in a more efficient way
