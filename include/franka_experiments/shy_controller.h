@@ -87,6 +87,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
   /* \brief Generates the trajectory deformation matrix based on the deformation length  */
   void precompute(int N);
+  /* \brief Downsample the deformation matrix to the desired length */
+  void downsampleDeformation(int new_N);
 
   /* \brief Saturation to avoid discontinuities */
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
@@ -161,6 +163,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::MatrixXd B;                    // waypoint paramtrization matrix
   Eigen::MatrixXd G;                    // trajectory deformation matrix        
   Eigen::MatrixXd H;                    // Shape of optimal variation
+  Eigen::MatrixXd H_full;                    // Shape of optimal variation
   Eigen::MatrixXd unit;                 // unit vector Nx1
   Eigen::MatrixXd Uh;                   // zero Nx1 for u
   // Desired state

@@ -199,7 +199,8 @@ void ShyController::precompute(int N)
 
   G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
-  H = std::sqrt(N) * G / G.norm();    
+  H_full = std::sqrt(N) * G / G.norm();  
+  H = H_full;  
 
   // ROS_INFO("Finished precompute");
 }
@@ -305,7 +306,7 @@ void  ShyController::update(const ros::Time& time,
   {
     deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
     // testing with regular recompute
-    precompute(deformed_segment_length);
+    downsampleDeformation(deformed_segment_length);
     need_recompute = false;
   }
   
@@ -407,8 +408,8 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   // update from dynamic reconfigure
   deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
-  precompute(deformed_segment_length);    // just set the flag and let the update() do the job ???
-  
+  precompute(trajectory_length);    // just set the flag and let the update() do the job ???
+  downsampleDeformation(deformed_segment_length);
   
   // probably can be done in a more efficient way
   int prev_ts = 0;
@@ -427,6 +428,25 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
 
   ROS_INFO("Received a new trajectory with %d waypoints. Deformation frame length %d, current admittance %f",
                  trajectory_length, deformed_segment_length, admittance);
+}
+
+void ShyController::downsampleDeformation(int new_N)
+{
+    // Check if N is greater than original size, return original
+    if (new_N >= trajectory_length) {
+        return ;
+    }
+
+    H = Eigen::MatrixXd(new_N, 1);
+    segment_deformation = Eigen::MatrixXd::Zero(new_N, num_of_joints);
+    
+    double stride = static_cast<double>(H_full.size() - 1) / (new_N - 1);
+
+    for (int i = 0; i < new_N; ++i) {
+        int index = static_cast<int>(std::round(i * stride));
+        H(i) = H_full(index);
+    }
+
 }
 
 void  ShyController::trajectoryCallback(
