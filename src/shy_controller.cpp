@@ -312,7 +312,7 @@ void  ShyController::update(const ros::Time& time,
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
   // probably the condition is a bit too basic. 
-  if ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) 
+  if ( (q_d-q).maxCoeff() > 0.14 || (q_d-q).minCoeff() < -0.14) 
   {
     preemptActiveGoal();
     this->startRequest(time_data.uptime);
@@ -336,6 +336,9 @@ void  ShyController::update(const ros::Time& time,
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
+
+  // double ccsr = robot_state.control_command_success_rate;
+  // ROS_INFO_COND(ccsr < 0.80, "CCSR drop detected");
 
   std::lock_guard<std::mutex> lock(admittance_mutex_);
   admittance = admittance_target_;
