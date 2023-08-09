@@ -301,7 +301,7 @@ void  ShyController::update(const ros::Time& time,
 
     //need_recompute = true;
   } // end traj deform
-  else if (need_recompute)  // updating deformation matrix only when no deformation takes place
+  else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
     deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
     // testing with regular recompute
