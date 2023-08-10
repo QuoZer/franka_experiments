@@ -264,8 +264,9 @@ void  ShyController::update(const ros::Time& time,
     int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
     
     // Additions to the map object are reflected in the original matrix
-    Eigen::Map<Eigen::MatrixXd> sub_vector(trajectory_deformation.data() + slow_index, short_vector_effective_size, 1);
-    sub_vector += segment_deformation.topRows(short_vector_effective_size);
+    trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 7) += segment_deformation.topRows(short_vector_effective_size);
+    // Eigen::Map<Eigen::MatrixXd> sub_vector(trajectory_deformation.data() + slow_index, short_vector_effective_size, 1);
+    // sub_vector += segment_deformation.topRows(short_vector_effective_size);
 
     // update q_d and qd_d
     q_d = trajectory_positions.row(slow_index) - trajectory_deformation.row(slow_index);
@@ -432,9 +433,9 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
 
 void ShyController::downsampleDeformation(int new_N)
 {
-    // Check if N is greater than original size, return original
-    if (new_N >= trajectory_length) {
-        return ;
+    // Check if N is greater than original size, return 
+    if (new_N > trajectory_length) {
+      return ;
     }
 
     H = Eigen::MatrixXd(new_N, 1);
