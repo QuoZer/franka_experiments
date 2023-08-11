@@ -147,6 +147,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   int trajectory_length = 0;            // samples  
   int fast_index = -1;                  // index of the fast update loop
   int slow_index = -1;                  // index of the slow (trajectory waypoint) update loop
+  franka::RobotMode robot_mode;
   // trajectory message
   trajectory_msgs::JointTrajectory trajectory_;
   JointTrajectoryConstPtr trajectory_ptr_;

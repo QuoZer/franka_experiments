@@ -234,6 +234,7 @@ void  ShyController::update(const ros::Time& time,
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
+  robot_mode = robot_state.robot_mode; 
 
   // update parameters changed online through dynamic reconfigure 
   std::lock_guard<std::mutex> lock(admittance_mutex_);
@@ -317,7 +318,7 @@ void  ShyController::update(const ros::Time& time,
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
   // probably the condition is a bit too basic. 
-  if ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) 
+  if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory)
   {
     preemptActiveGoal();
     this->startRequest(time_data.uptime);
@@ -471,6 +472,15 @@ void  ShyController::trajectoryCallback(
 void ShyController::goalCB(GoalHandle gh)
 {
   // Preconditions:
+  if (robot_mode == franka::RobotMode::kUserStopped || robot_mode == franka::RobotMode::kReflex)
+  {
+    ROS_WARN("Can't accept new action goals. Check the user stop button.");
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
+    result.error_string = "Robot is not ready";
+    gh.setRejected(result);
+    return;   
+  }
   if (!this->isRunning())
   {
     ROS_WARN("Can't accept new action goals. Controller is not running.");
@@ -480,7 +490,8 @@ void ShyController::goalCB(GoalHandle gh)
     gh.setRejected(result);
     return;
   }
-  if (have_trajectory){
+  if (have_trajectory)
+  {
     ROS_WARN("Received a new trajectory action while the old one is still being executed. Ignoring the new trajectory");
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
