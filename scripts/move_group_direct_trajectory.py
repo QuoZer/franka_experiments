@@ -222,16 +222,24 @@ class MoveGroupPythonInterfaceTutorial(object):
         ## We can plan a motion for this group to a desired pose for the
         ## end-effector:
         pose_goal = geometry_msgs.msg.Pose()
-        pose_goal.orientation.w = 1.0
-        pose_goal.position.x = 0.4
-        pose_goal.position.y = 0.1
-        pose_goal.position.z = 0.4
+        pose_goal.orientation.w = -0.03505
+        pose_goal.orientation.x =  0.90729
+        pose_goal.orientation.y = -0.41821
+        pose_goal.orientation.z =  0.02635
+        pose_goal.position.x = 0.61
+        pose_goal.position.y = -0.03
+        pose_goal.position.z = 0.63
 
         move_group.set_pose_target(pose_goal)
 
         ## Now, we call the planner to compute the plan and execute it.
         # `go()` returns a boolean indicating whether the planning and execution was successful.
-        success = move_group.go(wait=True)
+        print("Before 'go' command")
+        success = move_group.go(wait=False)
+        print("After 'go' command: "+str(success))
+        # sleep to give time to move
+        rospy.sleep(5)
+
         # Calling `stop()` ensures that there is no residual movement
         move_group.stop()
         # It is always good to clear your targets after planning with poses.
@@ -389,7 +397,10 @@ def main():
 
         tutorial = MoveGroupPythonInterfaceTutorial()
 
-        cartesian_plan, fraction = tutorial.plan_cartesian_path()
+        print("Going to pose")
+        tutorial.go_to_pose_goal()
+        print("Executing plan")
+        cartesian_plan, fraction = tutorial.plan_cartesian_path(scale=0.7)
 
         tutorial.display_trajectory(cartesian_plan)
 
