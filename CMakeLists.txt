@@ -249,6 +249,7 @@ install(FILES franka_example_controllers_plugin.xml
 ## in contrast to setup.py, you can choose the destination
  catkin_install_python(PROGRAMS
    scripts/move_group_direct_trajectory.py
+   scripts/parameter_control.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 

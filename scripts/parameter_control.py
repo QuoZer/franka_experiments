@@ -284,7 +284,7 @@ def main():
         print("Press Ctrl-D to exit at any time")
         print("")
 
-        interface = ShyControllerParameterInterface(velocity_factor=0.02)
+        interface = ShyControllerParameterInterface(velocity_factor=0.01)
         move_group = interface.move_group
 
         ## Step 1. Set a joint/pose/waypoint goal
@@ -307,18 +307,24 @@ def main():
 
         ## Step 3. Update the parameters while the robot is moving
         i = 0
-        while not all_close(pose_goal, move_group.get_current_pose().pose, 0.01):       # must be a better way to do this
+        while not all_close(pose_goal, move_group.get_current_pose().pose, 0.05):       # must be a better way to do this
             ## Step 3.1. Get the current state
             robot_state = interface.last_state # get the last state
             
             ## Step 3.2. Do smthng
             force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
-            print(robot_state.O_F_ext_hat_K[:3])
+            #print(robot_state.O_F_ext_hat_K[:3])
             print("Force: ", force)
+            calc_admittance = max(0, (force-6)/1000) 
+            calc_deflength = min( max(0.2, 5/force), 1)
+            #  20 -> 0.2
+            #   5 -> 1
+            #   5/f
+            print("Admm: {}; Length: {}".format(calc_admittance, calc_deflength) )
             
             ## Step 3.3. Update the parameters
-            interface.update_controller_parameters( max(0, 0.015-0.001*i), min(1, 0.1+0.01*i) )
-            rospy.sleep(1)
+            interface.update_controller_parameters( 0.002, calc_deflength )
+            rospy.sleep(0.1)
             i+=1
 
         print(i)
