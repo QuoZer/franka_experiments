@@ -202,15 +202,8 @@ class ShyControllerParameterInterface(object):
 
         ## Now, we call the planner to compute the plan and execute it.
         # `go()` returns a boolean indicating whether the planning and execution was successful.
-        success = move_group.go(wait=False)
+        success = move_group.go(wait=True)
 
-        print("Starting trajectory execution and parameter update")
-        i = 0
-        while not all_close(pose_goal, move_group.get_current_pose().pose, 0.01):
-            self.update_controller_parameters( max(0, 0.01-0.001*i), min(1, 0.1+0.01*i) )
-            rospy.sleep(1)
-            i+=1
-        print(i)
         # Calling `stop()` ensures that there is no residual movement
         move_group.stop()
         print("Stopping trajectory execution and parameter update")
@@ -293,11 +286,11 @@ def main():
         pose_goal.orientation.x =  0.90729
         pose_goal.orientation.y = -0.41821
         pose_goal.orientation.z =  0.02635
-        pose_goal.position.x = 0.61
+        pose_goal.position.x =  0.61
         pose_goal.position.y = -0.03
-        pose_goal.position.z = 0.63
+        pose_goal.position.z =  0.63
 
-        interface.move_group.set_pose_target(pose_goal)
+        move_group.set_pose_target(pose_goal)
 
         # Waiting for callbacks
         rospy.sleep(1)
@@ -316,7 +309,7 @@ def main():
             #print(robot_state.O_F_ext_hat_K[:3])
             print("Force: ", force)
             calc_admittance = max(0, (force-6)/1000) 
-            calc_deflength = min( max(0.2, 5/force), 1)
+            calc_deflength  = min(max(0.2, 5/force), 1)
             #  20 -> 0.2
             #   5 -> 1
             #   5/f
