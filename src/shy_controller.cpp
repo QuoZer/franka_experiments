@@ -159,10 +159,13 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   dq_d = dq_initial;    // zero
   delta_q = dq_initial;
   
-  haveTrajectory = false; // to be sure
+  have_trajectory = false; // to be sure
   fast_index = -1;
   slow_index = -1;
-  precompute(10);
+  deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
+  precompute(deformed_segment_length);
+
+  ROS_INFO("ShyController: Starting controller");
 }
 
 void ShyController::precompute(int N)
@@ -171,49 +174,40 @@ void ShyController::precompute(int N)
   //int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
+  segment_deformation     = Eigen::MatrixXd::Zero(N, num_of_joints);
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
-  dq_filtered_.fill(0);   // init with zeros
 
-  #ifdef ALT_METHOD
-    // metthod from "Physical Interaction as Communication"
-    A = Eigen::MatrixXd::Zero(N+2, N);
-    A.diagonal(0).setConstant(1);
-    A.diagonal(1).setConstant(-2);
-    A.diagonal(2).setConstant(1);
-    R = A.transpose() * A;
-    H = R.inverse();
-  #else
-    // method from "Trajectory Deformations from Physical Human-Robot Interaction"
-    // minimum jerk trajectory model matrix
-    A = Eigen::MatrixXd::Zero(N + 3, N);
-    // Fill diagonal with 1s
-    A.diagonal(0).setConstant(1);
-    // Fill the diagonal below it with -3
-    A.diagonal(-1).setConstant(-3);
-    // Fill the diagonal below -3 with 3
-    A.diagonal(-2).setConstant(3);
-    // Fill the diagonal below 3 with -1
-    A.diagonal(-3).setConstant(-1);
-    
-    R = A.transpose() * A;
-    // Ensures that the first two and the last two points are the same as in the original trajectory
-    B = Eigen::MatrixXd::Zero(4, N);
-    B(0, 0) = 1;
-    B(1, 1) = 1;
-    B(2, N - 2) = 1;
-    B(3, N - 1) = 1;
+  // method from "Trajectory Deformations from Physical Human-Robot Interaction"
+  // minimum jerk trajectory model matrix
+  A = Eigen::MatrixXd::Zero(N + 3, N);
+  // Fill diagonal with 1s
+  A.diagonal(0).setConstant(1);
+  // Fill the diagonal below it with -3
+  A.diagonal(-1).setConstant(-3);
+  // Fill the diagonal below -3 with 3
+  A.diagonal(-2).setConstant(3);
+  // Fill the diagonal below 3 with -1
+  A.diagonal(-3).setConstant(-1);
+  
+  R = A.transpose() * A;
+  // Ensures that the first two and the last two points are the same as in the original trajectory
+  B = Eigen::MatrixXd::Zero(4, N);
+  B(0, 0) = 1;
+  B(1, 1) = 1;
+  B(2, N - 2) = 1;
+  B(3, N - 1) = 1;
 
-    G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
+  G = (I - R.inverse() * B.transpose() * (B * R.inverse() * B.transpose()).inverse() * B ) * R.inverse() * unit ;    
 
-    H = std::sqrt(N) * G / G.norm();    
-  #endif
+  H_full = std::sqrt(N) * G / G.norm();  
+  H = H_full;  
 
   // ROS_INFO("Finished precompute");
 }
 
 void  ShyController::update(const ros::Time& time,
                             const ros::Duration& period) {
-  // Update time data (this block is taken from OG joint traj conroller)
+  // Update time data (this block is taken from the OG joint traj conroller)
   prev_time_data_ = *(time_data_.readFromRT());
   TimeData time_data;
   time_data.time   = time;                                     // Cache current time
@@ -227,7 +221,6 @@ void  ShyController::update(const ros::Time& time,
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
 
-      
   // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
   State desired_state;  
   State current_state;
@@ -241,45 +234,49 @@ void  ShyController::update(const ros::Time& time,
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
+  robot_mode = robot_state.robot_mode; 
+
+  // update parameters changed online through dynamic reconfigure 
+  std::lock_guard<std::mutex> lock(admittance_mutex_);
+  admittance = admittance_target_;
+  if (deformed_segment_ratio != deformed_segment_ratio_target_) need_recompute = true;
+  deformed_segment_ratio = deformed_segment_ratio_target_;
 
   // TRAJECTORY DEFORMATION
-  if (haveTrajectory) {
+  if (have_trajectory) {
     fast_index++;
     trajectory_sample_time = trajectory_times(slow_index+1, 0);
   }
-  if (haveTrajectory && fast_index*loop_sample_time >= trajectory_sample_time)    //  TODO: switch to time-based (instead of index-based) trajectory sampling?
+  if (have_trajectory && fast_index*loop_sample_time >= trajectory_sample_time)    //  TODO: switch to time-based (instead of index-based) trajectory sampling?
   {
     slow_index++;
     fast_index = 0;
     //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
+
+    // Nx7 = 1x1 * Nx1 * 1x7
+    if (segment_deformation.rows() !=  H.rows() ) {
+      ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
+    }
+
+    segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+
+    int remaining_size = trajectory_deformation.rows() - slow_index;
+    int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
     
-    #ifdef ALT_METHOD
-      Uh(0) = uh(dim);   // Uh = (uh at the current time step | 0 at the rest)
-      // Nx7 = 1x1 * NxN * Nx7
-      trajectory_deformation_ = admittance * H * Uh;
-    #else
-      // Nx7 = 1x1 * Nx1 * 1x7
-      trajectory_deformation_ = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
-    #endif
-    trajectory_frame_positions -= trajectory_deformation_;
-    
+    // Additions to the map object are reflected in the original matrix
+    trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 7) += segment_deformation.topRows(short_vector_effective_size);
+    // Eigen::Map<Eigen::MatrixXd> sub_vector(trajectory_deformation.data() + slow_index, short_vector_effective_size, 1);
+    // sub_vector += segment_deformation.topRows(short_vector_effective_size);
+
     // update q_d and qd_d
-    q_d = trajectory_frame_positions.row(0);
-    delta_q = (trajectory_frame_positions.row(1) - trajectory_frame_positions.row(0));     
+    q_d = trajectory_positions.row(slow_index) - trajectory_deformation.row(slow_index);
+    delta_q = trajectory_positions.row(slow_index+1) - trajectory_deformation.row(slow_index+1) - q_d.transpose().row(0);    // ugly and probably dangerous
     if (slow_index == 0 || slow_index == trajectory_length - 1) 
       dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
     else 
       dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 
-    // shift the deformation window one step 
-    // and add new new waypoint to the end
-    trajectory_frame_positions.block(0, 0, trajectory_frame_positions.rows()-1, trajectory_frame_positions.cols()) = 
-        trajectory_frame_positions.block(1, 0, trajectory_frame_positions.rows(), trajectory_frame_positions.cols());
-    if (slow_index+deformed_segment_length < trajectory_length)
-      trajectory_frame_positions.row(deformed_segment_length-1) = trajectory_positions.row(slow_index+deformed_segment_length);
-    else
-      trajectory_frame_positions.row(deformed_segment_length-1) = trajectory_positions.row(trajectory_length-1);
     
     // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
@@ -287,7 +284,7 @@ void  ShyController::update(const ros::Time& time,
     {
       ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
       slow_index = 0;
-      haveTrajectory = false;
+      have_trajectory = false;
       if (current_active_goal) {
         current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
         current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
@@ -303,16 +300,25 @@ void  ShyController::update(const ros::Time& time,
 
     setActionFeedback(desired_state, current_state);
 
-    publishTrajectoryMarkers(trajectory_frame_positions);
+    publishTrajectoryMarkers(trajectory_positions);
+
+    //need_recompute = true;
   } // end traj deform
+  else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
+  {
+    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
+    // testing with regular recompute
+    downsampleDeformation(deformed_segment_length);
+    need_recompute = false;
+  }
   
   // sanity check
-  if (!(trajectory_frame_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
+  if (!(trajectory_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
   {
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
   // probably the condition is a bit too basic. 
-  if ( (q_d-q).maxCoeff() > 0.14 || (q_d-q).minCoeff() < -0.14) 
+  if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory)
   {
     preemptActiveGoal();
     this->startRequest(time_data.uptime);
@@ -337,12 +343,7 @@ void  ShyController::update(const ros::Time& time,
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
 
-  // double ccsr = robot_state.control_command_success_rate;
-  // ROS_INFO_COND(ccsr < 0.80, "CCSR drop detected");
-
-  std::lock_guard<std::mutex> lock(admittance_mutex_);
-  admittance = admittance_target_;
-  deformed_segment_ratio = deformed_segment_ratio_target_;
+  // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
 
 void ShyController::stopping(const ros::Time& /*time*/)
@@ -402,15 +403,15 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   trajectory_length = traj.points.size();
   // Convert to eigen
   trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
-  trajectory_deformation_ = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
+  trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
+  
   // update from dynamic reconfigure
   deformed_segment_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio));
   deformed_segment_length = std::max(10, deformed_segment_length);    // we need some points anyway
-  precompute(deformed_segment_length); 
-  
-  trajectory_frame_positions = Eigen::MatrixXd(deformed_segment_length, num_of_joints);
+  precompute(trajectory_length);    // just set the flag and let the update() do the job ???
+  downsampleDeformation(deformed_segment_length);
   
   // probably can be done in a more efficient way
   int prev_ts = 0;
@@ -419,8 +420,6 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
       trajectory_positions(i, j) = traj.points[i].positions[j];
       trajectory_velocities(i, j) = traj.points[i].velocities[j];
       // also copy the first N waypoints to trajectory_deform
-      if (i < deformed_segment_length)
-        trajectory_frame_positions(i, j) = traj.points[i].positions[j];
     }
     // filling with time differences
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
@@ -433,10 +432,29 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
                  trajectory_length, deformed_segment_length, admittance);
 }
 
+void ShyController::downsampleDeformation(int new_N)
+{
+    // Check if N is greater than original size, return 
+    if (new_N > trajectory_length) {
+      return ;
+    }
+
+    H = Eigen::MatrixXd(new_N, 1);
+    segment_deformation = Eigen::MatrixXd::Zero(new_N, num_of_joints);
+    
+    double stride = static_cast<double>(H_full.size() - 1) / (new_N - 1);
+
+    for (int i = 0; i < new_N; ++i) {
+        int index = static_cast<int>(std::round(i * stride));
+        H(i) = H_full(index);
+    }
+
+}
+
 void  ShyController::trajectoryCallback(
     const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
 
-  if (haveTrajectory){
+  if (have_trajectory){
     ROS_WARN("Received a new trajectory message while the old one is still being executed. Ignoring the new trajectory");    
     return;
   }
@@ -447,13 +465,22 @@ void  ShyController::trajectoryCallback(
   trajectory_ = msg->trajectory[0].joint_trajectory;
   parseTrajectory(trajectory_);    
   
-  haveTrajectory = true;
+  have_trajectory = true;
   preemptActiveGoal();
 } 
 
 void ShyController::goalCB(GoalHandle gh)
 {
   // Preconditions:
+  if (robot_mode == franka::RobotMode::kUserStopped || robot_mode == franka::RobotMode::kReflex)
+  {
+    ROS_WARN("Can't accept new action goals. Check the user stop button.");
+    control_msgs::FollowJointTrajectoryResult result;
+    result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
+    result.error_string = "Robot is not ready";
+    gh.setRejected(result);
+    return;   
+  }
   if (!this->isRunning())
   {
     ROS_WARN("Can't accept new action goals. Controller is not running.");
@@ -463,7 +490,8 @@ void ShyController::goalCB(GoalHandle gh)
     gh.setRejected(result);
     return;
   }
-  if (haveTrajectory){
+  if (have_trajectory)
+  {
     ROS_WARN("Received a new trajectory action while the old one is still being executed. Ignoring the new trajectory");
     control_msgs::FollowJointTrajectoryResult result;
     result.error_code = control_msgs::FollowJointTrajectoryResult::INVALID_GOAL;
@@ -482,7 +510,7 @@ void ShyController::goalCB(GoalHandle gh)
   
   gh.setAccepted();
   rt_active_goal_ = rt_goal;
-  haveTrajectory = true;
+  have_trajectory = true;
 
   // Setup goal status checking timer
   goal_handle_timer_ = controller_nh_.createTimer(ros::Duration(1.0 / action_monitor_rate),
@@ -533,28 +561,52 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
     marker.header.stamp = ros::Time::now();
     marker.type = visualization_msgs::Marker::SPHERE;
     marker.action = visualization_msgs::Marker::ADD;
-    marker.scale.x = 0.01;
-    marker.scale.y = 0.01;
-    marker.scale.z = 0.01;
     marker.color.a = 1.0;
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
     marker.color.b = 0.0;
 
     Eigen::Vector3d translation;
+    Eigen::MatrixXd q_def = Eigen::MatrixXd::Zero(1, 7);
     for (int i = 0; i < trajectory.rows(); i++)
     {
-      forwardKinematics(trajectory.row(i).transpose(), translation);
+      q_def = trajectory.row(i) - trajectory_deformation.row(i);
+      forwardKinematics(q_def.transpose(), translation);
       marker.id = i;
       marker.pose.position.x = translation(0);
       marker.pose.position.y = translation(1);
       marker.pose.position.z = translation(2);
+      if (i == deformed_segment_length+slow_index) {   // deformation horizon
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.scale.x = 0.02;
+        marker.scale.y = 0.02;
+        marker.scale.z = 0.02;
+      }
+      else {
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.scale.x = 0.01;
+        marker.scale.y = 0.01;
+        marker.scale.z = 0.01;
+      }
+
       markers.markers.push_back(marker);
     }
+    marker.id = trajectory.rows();
+    marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    std::ostringstream oss;
+    oss << "Admittance: " << admittance << " \nDeformation length: " << deformed_segment_length;
+    marker.text = oss.str();
+    marker.pose.position.x = 0;
+    marker.pose.position.y = 0;
+    marker.pose.position.z = 1;
+    marker.scale.z = 0.1;
+    markers.markers.push_back(marker);
     // Append full trajectory markers
     markers.markers.insert(markers.markers.end(), full_trajectory_markers_.markers.begin(), full_trajectory_markers_.markers.end());
+    if (slow_index == trajectory_length - 1) markers.markers.clear(); // clear markers if trajectory is finished
     marker_publisher_->msg_ = markers;
     marker_publisher_->unlockAndPublish();
+
   }
 }
 

@@ -1,56 +1,20 @@
-#!/usr/bin/env python
-
-# Software License Agreement (BSD License)
-#
-# Copyright (c) 2013, SRI International
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-#  * Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-#  * Redistributions in binary form must reproduce the above
-#    copyright notice, this list of conditions and the following
-#    disclaimer in the documentation and/or other materials provided
-#    with the distribution.
-#  * Neither the name of SRI International nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# Author: Acorn Pooley, Mike Lautman
-
-## BEGIN_SUB_TUTORIAL imports
-##
-## To use the Python MoveIt interfaces, we will import the `moveit_commander`_ namespace.
-## This namespace provides us with a `MoveGroupCommander`_ class, a `PlanningSceneInterface`_ class,
-## and a `RobotCommander`_ class. More on these below. We also import `rospy`_ and some messages that we will use:
-##
-
-# Python 2/3 compatibility imports
 from __future__ import print_function
 from six.moves import input
-
 import sys
 import copy
+import math
+import numpy as np
+
 import rospy
+import dynamic_reconfigure.client
+
+import geometry_msgs.msg
+from std_msgs.msg import String
+import franka_msgs.msg as franka
+
 import moveit_commander
 import moveit_msgs.msg
-import geometry_msgs.msg
+from moveit_commander.conversions import pose_to_list
 
 try:
     from math import pi, tau, dist, fabs, cos
@@ -62,11 +26,6 @@ except:  # For Python 2 compatibility
     def dist(p, q):
         return sqrt(sum((p_i - q_i) ** 2.0 for p_i, q_i in zip(p, q)))
 
-
-from std_msgs.msg import String
-from moveit_commander.conversions import pose_to_list
-
-## END_SUB_TUTORIAL
 
 
 def all_close(goal, actual, tolerance):
@@ -99,17 +58,15 @@ def all_close(goal, actual, tolerance):
     return True
 
 
-class MoveGroupPythonInterfaceTutorial(object):
-    """MoveGroupPythonInterfaceTutorial"""
+class ShyControllerParameterInterface(object):
+    """ShyControllerParameterInterface"""
 
-    def __init__(self):
-        super(MoveGroupPythonInterfaceTutorial, self).__init__()
+    def __init__(self, velocity_factor):
+        super(ShyControllerParameterInterface, self).__init__()
 
-        ## BEGIN_SUB_TUTORIAL setup
-        ##
         ## First initialize `moveit_commander`_ and a `rospy`_ node:
         moveit_commander.roscpp_initialize(sys.argv)
-        rospy.init_node("move_group_python_interface_tutorial", anonymous=True)
+        rospy.init_node("shy_controller_parameter_interface", anonymous=True)
 
         ## Instantiate a `RobotCommander`_ object. Provides information such as the robot's
         ## kinematic model and the robot's current joint states
@@ -121,14 +78,9 @@ class MoveGroupPythonInterfaceTutorial(object):
         scene = moveit_commander.PlanningSceneInterface()
 
         ## Instantiate a `MoveGroupCommander`_ object.  This object is an interface
-        ## to a planning group (group of joints).  In this tutorial the group is the primary
-        ## arm joints in the Panda robot, so we set the group's name to "panda_arm".
-        ## If you are using a different robot, change this value to the name of your robot
-        ## arm planning group.
-        ## This interface can be used to plan and execute motions:
+        ## to a planning group (group of joints). This interface can be used to plan and execute motions:
         group_name = "panda_arm"
         move_group = moveit_commander.MoveGroupCommander(group_name)
-        
 
         ## Create a `DisplayTrajectory`_ ROS publisher which is used to display
         ## trajectories in Rviz:
@@ -138,17 +90,19 @@ class MoveGroupPythonInterfaceTutorial(object):
             queue_size=20,
         )
 
-        ## END_SUB_TUTORIAL
+        self.parameter_updater = dynamic_reconfigure.client.Client("/shy_controller/dynamic_reconfigure_compliance_param_node",
+                                                              timeout=30,
+                                                              config_callback=None)
 
-        ## BEGIN_SUB_TUTORIAL basic_info
-        ##
+        self.robot_state_subscriber = rospy.Subscriber("franka_state_controller/franka_states",
+                                                   franka.FrankaState, 
+                                                   self.state_callback)
+
         ## Getting Basic Information
         ## ^^^^^^^^^^^^^^^^^^^^^^^^^
-        # We can get the name of the reference frame for this robot:
         planning_frame = move_group.get_planning_frame()
         print("============ Planning frame: %s" % planning_frame)
 
-        # We can also print the name of the end-effector link for this group:
         eef_link = move_group.get_end_effector_link()
         print("============ End effector link: %s" % eef_link)
 
@@ -156,12 +110,8 @@ class MoveGroupPythonInterfaceTutorial(object):
         group_names = robot.get_group_names()
         print("============ Available Planning Groups:", robot.get_group_names())
 
-        # Sometimes for debugging it is useful to print the entire state of the
-        # robot:
-        print("============ Printing robot state")
-        print(robot.get_current_state())
-        print("")
-        ## END_SUB_TUTORIAL
+        # Parameters
+        move_group.set_max_velocity_scaling_factor(velocity_factor)
 
         # Misc variables
         self.box_name = ""
@@ -172,6 +122,23 @@ class MoveGroupPythonInterfaceTutorial(object):
         self.planning_frame = planning_frame
         self.eef_link = eef_link
         self.group_names = group_names
+
+
+
+    def state_callback(self, data: franka.FrankaState):
+        self.last_state = data
+        
+        return
+    
+    def update_controller_parameters(self, admittance, deform_length):
+        # Update the parameters
+        assert 0 <= admittance <= 0.5, "Admittance must be positive and not too high"
+        assert 0 <= deform_length <= 1, "Deformed length must be between 0 and 1"
+        
+        self.parameter_updater.update_configuration({"admittance": admittance, "deformed_length": deform_length})
+
+        return
+        
 
     def go_to_joint_state(self):
         # Copy class variables to local variables to make the web tutorials more clear.
@@ -230,18 +197,23 @@ class MoveGroupPythonInterfaceTutorial(object):
         pose_goal.position.y = -0.03
         pose_goal.position.z = 0.63
 
+        move_group.set_max_velocity_scaling_factor(0.02)
         move_group.set_pose_target(pose_goal)
 
         ## Now, we call the planner to compute the plan and execute it.
         # `go()` returns a boolean indicating whether the planning and execution was successful.
-        print("Before 'go' command")
         success = move_group.go(wait=False)
-        print("After 'go' command: "+str(success))
-        # sleep to give time to move
-        rospy.sleep(5)
 
+        print("Starting trajectory execution and parameter update")
+        i = 0
+        while not all_close(pose_goal, move_group.get_current_pose().pose, 0.01):
+            self.update_controller_parameters( max(0, 0.01-0.001*i), min(1, 0.1+0.01*i) )
+            rospy.sleep(1)
+            i+=1
+        print(i)
         # Calling `stop()` ensures that there is no residual movement
         move_group.stop()
+        print("Stopping trajectory execution and parameter update")
         # It is always good to clear your targets after planning with poses.
         # Note: there is no equivalent function for clear_joint_value_targets().
         move_group.clear_pose_targets()
@@ -285,31 +257,18 @@ class MoveGroupPythonInterfaceTutorial(object):
         # translation.  We will disable the jump threshold by setting it to 0.0,
         # ignoring the check for infeasible jumps in joint space, which is sufficient
         # for this tutorial.
-        move_group.set_max_velocity_scaling_factor(0.01)
+        move_group.set_max_velocity_scaling_factor(0.01)  # doesn't seem to work
         (plan, fraction) = move_group.compute_cartesian_path(
             waypoints, 0.01, 0.0  # waypoints to follow  # eef_step
         )  # jump_threshold
 
         # Note: We are just planning, not asking move_group to actually move the robot yet:
         return plan, fraction
-
-        ## END_SUB_TUTORIAL
-
+    
     def display_trajectory(self, plan):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
         robot = self.robot
         display_trajectory_publisher = self.display_trajectory_publisher
 
-        ## BEGIN_SUB_TUTORIAL display_trajectory
-        ##
-        ## Displaying a Trajectory
-        ## ^^^^^^^^^^^^^^^^^^^^^^^
-        ## You can ask RViz to visualize a plan (aka trajectory) for you. But the
-        ## group.plan() method does this automatically so this is not that useful
-        ## here (it just displays the same trajectory again):
-        ##
         ## A `DisplayTrajectory`_ msg has two primary fields, trajectory_start and trajectory.
         ## We populate the trajectory_start with our current robot state to copy over
         ## any AttachedCollisionObjects and add our plan to the trajectory.
@@ -319,93 +278,63 @@ class MoveGroupPythonInterfaceTutorial(object):
         # Publish
         display_trajectory_publisher.publish(display_trajectory)
 
-        ## END_SUB_TUTORIAL
-
-    def execute_plan(self, plan):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.move_group
-
-        ## BEGIN_SUB_TUTORIAL execute_plan
-        ##
-        ## Executing a Plan
-        ## ^^^^^^^^^^^^^^^^
-        ## Use execute if you would like the robot to follow
-        ## the plan that has already been computed:
-        move_group.execute(plan, wait=True)
-
-        ## **Note:** The robot's current joint state must be within some tolerance of the
-        ## first waypoint in the `RobotTrajectory`_ or ``execute()`` will fail
-        ## END_SUB_TUTORIAL
-
-    def wait_for_state_update(
-        self, box_is_known=False, box_is_attached=False, timeout=4
-    ):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        box_name = self.box_name
-        scene = self.scene
-
-        ## BEGIN_SUB_TUTORIAL wait_for_scene_update
-        ##
-        ## Ensuring Collision Updates Are Received
-        ## ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        ## If the Python node was just created (https://github.com/ros/ros_comm/issues/176),
-        ## or dies before actually publishing the scene update message, the message
-        ## could get lost and the box will not appear. To ensure that the updates are
-        ## made, we wait until we see the changes reflected in the
-        ## ``get_attached_objects()`` and ``get_known_object_names()`` lists.
-        ## For the purpose of this tutorial, we call this function after adding,
-        ## removing, attaching or detaching an object in the planning scene. We then wait
-        ## until the updates have been made or ``timeout`` seconds have passed.
-        ## To avoid waiting for scene updates like this at all, initialize the
-        ## planning scene interface with  ``synchronous = True``.
-        start = rospy.get_time()
-        seconds = rospy.get_time()
-        while (seconds - start < timeout) and not rospy.is_shutdown():
-            # Test if the box is in attached objects
-            attached_objects = scene.get_attached_objects([box_name])
-            is_attached = len(attached_objects.keys()) > 0
-
-            # Test if the box is in the scene.
-            # Note that attaching the box will remove it from known_objects
-            is_known = box_name in scene.get_known_object_names()
-
-            # Test if we are in the expected state
-            if (box_is_attached == is_attached) and (box_is_known == is_known):
-                return True
-
-            # Sleep so that we give other threads time on the processor
-            rospy.sleep(0.1)
-            seconds = rospy.get_time()
-
-        # If we exited the while loop without returning then we timed out
-        return False
-        ## END_SUB_TUTORIAL
-
-
 def main():
     try:
-        print("")
-        print("----------------------------------------------------------")
-        print("Welcome to the MoveIt MoveGroup Python Trajectory Generator")
         print("----------------------------------------------------------")
         print("Press Ctrl-D to exit at any time")
         print("")
 
-        tutorial = MoveGroupPythonInterfaceTutorial()
+        interface = ShyControllerParameterInterface(velocity_factor=0.01)
+        move_group = interface.move_group
 
-        print("Going to pose")
-        tutorial.go_to_pose_goal()
-        print("Executing plan")
-        cartesian_plan, fraction = tutorial.plan_cartesian_path(scale=0.7)
+        ## Step 1. Set a joint/pose/waypoint goal
+        pose_goal = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
+        pose_goal.orientation.w = -0.03505
+        pose_goal.orientation.x =  0.90729
+        pose_goal.orientation.y = -0.41821
+        pose_goal.orientation.z =  0.02635
+        pose_goal.position.x = 0.61
+        pose_goal.position.y = -0.03
+        pose_goal.position.z = 0.63
 
-        tutorial.display_trajectory(cartesian_plan)
+        interface.move_group.set_pose_target(pose_goal)
 
-        input("============ Press `Enter` to execute the saved path ...")
-        tutorial.execute_plan(cartesian_plan)
+        # Waiting for callbacks
+        rospy.sleep(1)
+
+        ## Step 2. Execute the plan (non blocking)
+        success = move_group.go(wait=False)
+
+        ## Step 3. Update the parameters while the robot is moving
+        i = 0
+        while not all_close(pose_goal, move_group.get_current_pose().pose, 0.05):       # must be a better way to do this
+            ## Step 3.1. Get the current state
+            robot_state = interface.last_state # get the last state
+            
+            ## Step 3.2. Do smthng
+            force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
+            #print(robot_state.O_F_ext_hat_K[:3])
+            print("Force: ", force)
+            calc_admittance = max(0, (force-6)/1000) 
+            calc_deflength = min( max(0.2, 5/force), 1)
+            #  20 -> 0.2
+            #   5 -> 1
+            #   5/f
+            print("Admm: {}; Length: {}".format(calc_admittance, calc_deflength) )
+            
+            ## Step 3.3. Update the parameters
+            interface.update_controller_parameters( 0.002, calc_deflength )
+            rospy.sleep(0.1)
+            i+=1
+
+        print(i)
+        print("Stopping trajectory execution and parameter update")
+        # Calling `stop()` ensures that there is no residual movement
+        move_group.stop()
+        # It is always good to clear your targets after planning with poses.
+        # Note: there is no equivalent function for clear_joint_value_targets().
+        move_group.clear_pose_targets()
+
 
         print("============ demo complete!")
     except rospy.ROSInterruptException:
@@ -416,39 +345,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-## BEGIN_TUTORIAL
-## .. _moveit_commander:
-##    http://docs.ros.org/noetic/api/moveit_commander/html/namespacemoveit__commander.html
-##
-## .. _MoveGroupCommander:
-##    http://docs.ros.org/noetic/api/moveit_commander/html/classmoveit__commander_1_1move__group_1_1MoveGroupCommander.html
-##
-## .. _RobotCommander:
-##    http://docs.ros.org/noetic/api/moveit_commander/html/classmoveit__commander_1_1robot_1_1RobotCommander.html
-##
-## .. _PlanningSceneInterface:
-##    http://docs.ros.org/noetic/api/moveit_commander/html/classmoveit__commander_1_1planning__scene__interface_1_1PlanningSceneInterface.html
-##
-## .. _DisplayTrajectory:
-##    http://docs.ros.org/noetic/api/moveit_msgs/html/msg/DisplayTrajectory.html
-##
-## .. _RobotTrajectory:
-##    http://docs.ros.org/noetic/api/moveit_msgs/html/msg/RobotTrajectory.html
-##
-## .. _rospy:
-##    http://docs.ros.org/noetic/api/rospy/html/
-## CALL_SUB_TUTORIAL imports
-## CALL_SUB_TUTORIAL setup
-## CALL_SUB_TUTORIAL basic_info
-## CALL_SUB_TUTORIAL plan_to_joint_state
-## CALL_SUB_TUTORIAL plan_to_pose
-## CALL_SUB_TUTORIAL plan_cartesian_path
-## CALL_SUB_TUTORIAL display_trajectory
-## CALL_SUB_TUTORIAL execute_plan
-## CALL_SUB_TUTORIAL add_box
-## CALL_SUB_TUTORIAL wait_for_scene_update
-## CALL_SUB_TUTORIAL attach_object
-## CALL_SUB_TUTORIAL detach_object
-## CALL_SUB_TUTORIAL remove_object
-## END_TUTORIAL

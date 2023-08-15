@@ -87,6 +87,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
   /* \brief Generates the trajectory deformation matrix based on the deformation length  */
   void precompute(int N);
+  /* \brief Downsample the deformation matrix to the desired length */
+  void downsampleDeformation(int new_N);
 
   /* \brief Saturation to avoid discontinuities */
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
@@ -138,12 +140,14 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   
   // Trajectory deformation stuff
   std::string robot_model_ = "panda";
-  bool haveTrajectory = false; 
+  bool have_trajectory = false; 
+  bool need_recompute = true;
   int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
   int trajectory_length = 0;            // samples  
   int fast_index = -1;                  // index of the fast update loop
   int slow_index = -1;                  // index of the slow (trajectory waypoint) update loop
+  franka::RobotMode robot_mode;
   // trajectory message
   trajectory_msgs::JointTrajectory trajectory_;
   JointTrajectoryConstPtr trajectory_ptr_;
@@ -152,14 +156,15 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::MatrixXd trajectory_velocities;
   Eigen::MatrixXi trajectory_times;
   // deformed trajectory eigen data
-  Eigen::MatrixXd trajectory_frame_positions;
-  Eigen::MatrixXd trajectory_deformation_;
+  Eigen::MatrixXd trajectory_deformation;
+  Eigen::MatrixXd segment_deformation;
   // trajectory deformation matrixes
   Eigen::MatrixXd A;                    // minimum jerk trajectory model matrix
   Eigen::MatrixXd R;
   Eigen::MatrixXd B;                    // waypoint paramtrization matrix
   Eigen::MatrixXd G;                    // trajectory deformation matrix        
   Eigen::MatrixXd H;                    // Shape of optimal variation
+  Eigen::MatrixXd H_full;                    // Shape of optimal variation
   Eigen::MatrixXd unit;                 // unit vector Nx1
   Eigen::MatrixXd Uh;                   // zero Nx1 for u
   // Desired state
