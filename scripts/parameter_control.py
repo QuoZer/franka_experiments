@@ -312,7 +312,8 @@ def main():
             robot_state = interface.last_state # get the last state
             
             ## Step 3.2. Do smthng
-            force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K) )
+            force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
+            print(robot_state.O_F_ext_hat_K[:3])
             print("Force: ", force)
             
             ## Step 3.3. Update the parameters
