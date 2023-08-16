@@ -640,7 +640,7 @@ void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int f
   full_trajectory_markers_ = markers;
 }
 
-Eigen::Matrix<double, 7, 4> ShyController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
+Eigen::Matrix<double, 8, 4> ShyController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
 {
   // Create DH parameters (data given by maker franka-emika)
   dh <<   0,      0,        0.333,   joint_variable(0, 0),
@@ -649,12 +649,13 @@ Eigen::Matrix<double, 7, 4> ShyController::dh_params(const Eigen::Matrix<double,
         M_PI/2,   0.0825,   0,       joint_variable(3, 0),
        -M_PI/2,  -0.0825,   0.384,   joint_variable(4, 0),
         M_PI/2,   0,        0,       joint_variable(5, 0),
-        M_PI/2,   0.088,    0.107,   joint_variable(6, 0);
+        M_PI/2,   0.088,    0.107,   joint_variable(6, 0),
+        0,        0,        0.103,   -M_PI/4;
 
   return dh;
 }
 
-Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh) 
+Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 8, 4>& dh) 
 {
   double alpha = dh(i, 0);
   double a = dh(i, 1);
@@ -671,7 +672,7 @@ Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4
 
 void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation)
 {
-  Eigen::Matrix<double, 7, 4> dh_parameters = dh_params(joint_pose);
+  Eigen::Matrix<double, 8, 4> dh_parameters = dh_params(joint_pose);
 
   Eigen::Matrix4d T_01 = TF_matrix(0, dh_parameters);
   Eigen::Matrix4d T_12 = TF_matrix(1, dh_parameters);
@@ -680,10 +681,11 @@ void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_p
   Eigen::Matrix4d T_45 = TF_matrix(4, dh_parameters);
   Eigen::Matrix4d T_56 = TF_matrix(5, dh_parameters);
   Eigen::Matrix4d T_67 = TF_matrix(6, dh_parameters);
+  Eigen::Matrix4d T_7E = TF_matrix(7, dh_parameters);
 
-  Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
+  Eigen::Matrix4d T_0E = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67 * T_7E;
 
-  translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
+  translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_0E, 0, 3);
 }
 
 

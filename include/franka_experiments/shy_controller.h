@@ -114,11 +114,11 @@ class  ShyController : public controller_interface::MultiInterfaceController<
 
   // Viz markers
   visualization_msgs::MarkerArray full_trajectory_markers_;
-  Eigen::Matrix<double, 7, 4> dh;
+  Eigen::Matrix<double, 8, 4> dh;
   /* Calc DH matrix for the given configuration */
-  Eigen::Matrix<double, 7, 4> dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable);
+  Eigen::Matrix<double, 8, 4> dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable);
   /* Calc transformation matrix for the input joint */
-  Eigen::Matrix4d TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh);
+  Eigen::Matrix4d TF_matrix(int i, const Eigen::Matrix<double, 8, 4>& dh);
   /* Get translation vector from the given configuration */
   void forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation);
 
