@@ -32,7 +32,7 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
 
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
-    ROS_ERROR_STREAM(" ShyController: Could not read parameter arm_id");
+    ROS_ERROR_STREAM(" ShyCartesianController: Could not read parameter arm_id");
     return false;
   }
   std::vector<std::string> joint_names;
@@ -676,7 +676,7 @@ void ShyCartesianController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajecto
   full_trajectory_markers_ = markers;
 }
 
-Eigen::Matrix<double, 7, 4> ShyCartesianController::dh_params(const std::vector<double>& joint_variable) 
+Eigen::Matrix<double, 8, 4> ShyCartesianController::dh_params(const std::vector<double>& joint_variable) 
 {
   // Create DH parameters (data given by maker franka-emika)
   dh <<   0,      0,        0.333,   joint_variable[0],
@@ -685,12 +685,13 @@ Eigen::Matrix<double, 7, 4> ShyCartesianController::dh_params(const std::vector<
         M_PI/2,   0.0825,   0,       joint_variable[3],
        -M_PI/2,  -0.0825,   0.384,   joint_variable[4],
         M_PI/2,   0,        0,       joint_variable[5],
-        M_PI/2,   0.088,    0.107,   joint_variable[6];
+        M_PI/2,   0.088,    0.107,   joint_variable[6],
+        0,        0,        0.103,   -M_PI/4;
 
   return dh;
 }
 
-Eigen::Matrix4d ShyCartesianController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh) 
+Eigen::Matrix4d ShyCartesianController::TF_matrix(int i, const Eigen::Matrix<double, 8, 4>& dh) 
 {
   double alpha = dh(i, 0);
   double a = dh(i, 1);
@@ -707,7 +708,7 @@ Eigen::Matrix4d ShyCartesianController::TF_matrix(int i, const Eigen::Matrix<dou
 
 void ShyCartesianController::forwardKinematics(const std::vector<double>& joint_pose, Eigen::Vector3d& translation, Eigen::Vector4d& orientation)
 {
-  Eigen::Matrix<double, 7, 4> dh_parameters = dh_params(joint_pose);
+  Eigen::Matrix<double, 8, 4> dh_parameters = dh_params(joint_pose);
 
   Eigen::Matrix4d T_01 = TF_matrix(0, dh_parameters);
   Eigen::Matrix4d T_12 = TF_matrix(1, dh_parameters);
@@ -716,14 +717,15 @@ void ShyCartesianController::forwardKinematics(const std::vector<double>& joint_
   Eigen::Matrix4d T_45 = TF_matrix(4, dh_parameters);
   Eigen::Matrix4d T_56 = TF_matrix(5, dh_parameters);
   Eigen::Matrix4d T_67 = TF_matrix(6, dh_parameters);
+  Eigen::Matrix4d T_78 = TF_matrix(7, dh_parameters);
 
-  Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
-  tf::Matrix3x3 tf3d(T_07(0, 0), T_07(0, 1), T_07(0, 2),
-                     T_07(1, 0), T_07(1, 1), T_07(1, 2),
-                     T_07(2, 0), T_07(2, 1), T_07(2, 2));
+  Eigen::Matrix4d T_08 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67 * T_78;
+  tf::Matrix3x3 tf3d(T_08(0, 0), T_08(0, 1), T_08(0, 2),
+                     T_08(1, 0), T_08(1, 1), T_08(1, 2),
+                     T_08(2, 0), T_08(2, 1), T_08(2, 2));
   tf::Quaternion tfqt;
   tf3d.getRotation(tfqt);
-  translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
+  translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_08, 0, 3);
   orientation = Eigen::Vector4d(tfqt.x(), tfqt.y(), tfqt.z(), tfqt.w());
 }
 
