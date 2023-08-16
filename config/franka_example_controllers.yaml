@@ -41,8 +41,8 @@ shy_controller:
     trajectory_deformed_length: 10
     admittance: 0.001
     
-cartesian_impedance_example_controller:
-    type: franka_example_controllers/CartesianImpedanceExampleController
+shy_cartesian_controller:
+    type: franka_example_controllers/ShyCartesianController
     arm_id: $(arg arm_id)
     joint_names:
         - $(arg arm_id)_joint1
@@ -52,3 +52,5 @@ cartesian_impedance_example_controller:
         - $(arg arm_id)_joint5
         - $(arg arm_id)_joint6
         - $(arg arm_id)_joint7
+    trajectory_deformed_length: 10
+    admittance: 0.001

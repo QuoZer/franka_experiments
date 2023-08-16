@@ -53,14 +53,6 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
 
-  std::vector<double> k_gains_vec;
-  if (!node_handle.getParam("k_gains", k_gains_vec) || k_gains_vec.size() != 7) {
-    ROS_ERROR(
-        "ShyController:  Invalid or no k_gain parameters provided, aborting "
-        "controller init!");
-    return false;
-  }
-
   auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
   if (model_interface == nullptr) {
     ROS_ERROR_STREAM(
@@ -150,13 +142,14 @@ void  ShyCartesianController::starting(const ros::Time& /*time*/) {
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
   // convert to eigen
   Eigen::Map<Eigen::Matrix<double, 7, 1>> q_initial(initial_state.q.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> dq_initial(initial_state.dq.data()); //
+  Eigen::Affine3d initial_transform(Eigen::Matrix4d::Map(initial_state.O_T_EE.data()));
 
-  // set target positions to initial position
-  q_d = q_initial;
-  dq_initial.fill(0);
-  dq_d = dq_initial;    // zero
-  delta_q = dq_initial;
+  // set equilibrium point to current state
+  position_d_ = initial_transform.translation();
+  orientation_d_ = Eigen::Quaterniond(initial_transform.rotation());
+
+  // set nullspace equilibrium configuration to initial q
+  q_d_nullspace_ = q_initial;
   
   have_trajectory = false; // to be sure
   fast_index = -1;
@@ -271,7 +264,11 @@ void  ShyCartesianController::update(const ros::Time& time,
     
     // Update targets
     position_d_ = trajectory_deformation.row(slow_index) + trajectory_positions.row(slow_index);
-    orientation_d_ = Eigen::Quaterniond(trajectory_orientations.row(slow_index).data());
+    orientation_d_ = Eigen::Quaterniond(trajectory_orientations(slow_index, 3),
+                                        trajectory_orientations(slow_index, 0), 
+                                        trajectory_orientations(slow_index, 1), 
+                                        trajectory_orientations(slow_index, 2));
+      //trajectory_orientations.row(slow_index).data());  // xyzw
 
     // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
@@ -289,12 +286,12 @@ void  ShyCartesianController::update(const ros::Time& time,
       }
     }
 
-    desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
-    desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
-    desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-    setActionFeedback(desired_state, current_state);
+    // desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
+    // desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
+    // desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
+    // setActionFeedback(desired_state, current_state);
 
-    //publishTrajectoryMarkers(trajectory_positions);
+    publishTrajectoryMarkers(trajectory_positions);
   } // end traj deform
   else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
@@ -304,19 +301,19 @@ void  ShyCartesianController::update(const ros::Time& time,
     need_recompute = false;
   }
   
-  // sanity check
-  if (!(trajectory_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
-  {
-    throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
-  }
-  // probably the condition is a bit too basic. 
-  if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory)
-  {
-    preemptActiveGoal();
-    this->startRequest(time_data.uptime);
-    ROS_WARN("Trajectory positions are too far from current robot state. Dropping the goal");
-    //throw std::runtime_error("Trajectory positions are too far from current robot state");
-  }
+  // sanity check   TODO: change to cartesian space
+  // if (!(trajectory_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
+  // {
+  //   throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
+  // }
+  // // probably the condition is a bit too basic. 
+  // if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory)
+  // {
+  //   preemptActiveGoal();
+  //   this->startRequest(time_data.uptime);
+  //   ROS_WARN("Trajectory positions are too far from current robot state. Dropping the goal");
+  //   //throw std::runtime_error("Trajectory positions are too far from current robot state");
+  // }
 
   // compute error to desired pose
   // position error
@@ -356,9 +353,15 @@ void  ShyCartesianController::update(const ros::Time& time,
   tau_d << saturateTorqueRate(tau_d, tau_J_d);
   // sending tau to the robot
   for (size_t i = 0; i < 7; ++i) {
-    joint_handles_[i].setCommand(tau_d_saturated[i]);
+    joint_handles_[i].setCommand(tau_d(i));
   }
 
+  cartesian_stiffness_ =
+      filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
+  cartesian_damping_ =
+      filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
+  nullspace_stiffness_ =
+      filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
   // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
 
@@ -599,7 +602,8 @@ void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajector
     Eigen::MatrixXd q_def = Eigen::MatrixXd::Zero(1, 7);
     for (int i = 0; i < trajectory.rows(); i++)
     {
-      q_def = trajectory.row(i) - trajectory_deformation.row(i);
+      //Sq_def = trajectory.row(i) - trajectory_deformation.row(i);
+      translation = trajectory_positions.row(i) + trajectory_deformation.row(i);
       //forwardKinematics(q_def.transpose(), translation, orientation);
       marker.id = i;
       marker.pose.position.x = translation(0);
