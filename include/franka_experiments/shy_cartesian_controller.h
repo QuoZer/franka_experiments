@@ -43,7 +43,7 @@
 
 namespace franka_example_controllers {
 
-class  ShyController : public controller_interface::MultiInterfaceController<
+class  ShyCartesianController : public controller_interface::MultiInterfaceController<
                                                 franka_hw::FrankaModelInterface,
                                                 hardware_interface::EffortJointInterface,
                                                 franka_hw::FrankaStateInterface> {
@@ -118,12 +118,11 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   visualization_msgs::MarkerArray full_trajectory_markers_;
   Eigen::Matrix<double, 7, 4> dh;
   /* Calc DH matrix for the given configuration */
-  Eigen::Matrix<double, 7, 4> dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable);
+  Eigen::Matrix<double, 7, 4> dh_params(const std::vector<double>& joint_variable);
   /* Calc transformation matrix for the input joint */
   Eigen::Matrix4d TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh);
   /* Get translation vector from the given configuration */
-  void forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation, Eigen::Vector4d& orientation);
-
+  void forwardKinematics(const std::vector<double>& joint_pose, Eigen::Vector3d& translation, Eigen::Vector4d& orientation);
   // time structures
   realtime_tools::RealtimeBuffer<TimeData> time_data_;
   TimeData prev_time_data_;
@@ -180,6 +179,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   double nullspace_stiffness_{20.0};
   double nullspace_stiffness_target_{20.0};
   const double delta_tau_max_{1.0};
+  double filter_params_{0.005};
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_;
   Eigen::Matrix<double, 6, 6> cartesian_stiffness_target_;
   Eigen::Matrix<double, 6, 6> cartesian_damping_;
@@ -199,8 +199,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   int time_scaling_factor = 1;                // HACK to reduce velocity
   double coriolis_factor_{1.0};
 
-  double filter_params_{0.005};
-  const double delta_tau_max_{1.0};
 
   // ROS things
   ros::NodeHandle controller_nh_;
@@ -209,7 +207,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   MarkerPublisherPtr marker_publisher_; 
 
   // Dynamic reconfigure
-  std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
+  std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::cart_compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
 };

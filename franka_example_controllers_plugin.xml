@@ -13,4 +13,10 @@
     </description>
   </class>
 
+  <class name="franka_example_controllers/ShyCartesianController" type="franka_example_controllers::ShyCartesianController" base_class_type="controller_interface::ControllerBase">
+    <description>
+      A controller based on trajectory deformation paper working in cartesian space
+    </description>
+  </class>  
+
 </library>

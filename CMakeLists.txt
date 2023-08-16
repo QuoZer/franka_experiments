@@ -118,6 +118,7 @@ generate_messages(
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
  generate_dynamic_reconfigure_options(
    cfg/compliance_param.cfg
+   cfg/cart_compliance_param.cfg
  )
 
 ###################################
@@ -171,6 +172,7 @@ add_dependencies(trajectory_pub_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catki
 add_library(franka_experiments
   src/cartesian_traject_controller.cpp
   src/shy_controller.cpp
+  src/shy_cartesian_controller.cpp
 )
 
 

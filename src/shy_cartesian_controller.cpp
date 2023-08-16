@@ -18,7 +18,7 @@
 
 namespace franka_example_controllers {
 
-bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
+bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
                                       ros::NodeHandle& node_handle) {
   std::vector<double> cartesian_stiffness_vector;
   std::vector<double> cartesian_damping_vector;
@@ -27,7 +27,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   controller_nh_ = node_handle;
 
   sub_trajectory_ = node_handle.subscribe(
-      "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
+      "move_group/display_planned_path", 20, & ShyCartesianController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
       ros::TransportHints().reliable().tcpNoDelay());
 
   std::string arm_id;
@@ -118,7 +118,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
 
       dynamic_reconfigure_compliance_param_node_);
   dynamic_server_compliance_param_->setCallback(
-      boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
+      boost::bind(& ShyCartesianController::complianceParamCallback, this, _1, _2));
 
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
@@ -127,7 +127,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   cartesian_damping_.setZero();
 
   // ROS API: Subscribed topics
-  trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCallback, this);
+  trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyCartesianController::trajectoryCallback, this);
 
   // ROS API: Published topics
   marker_publisher_.reset(new MarkerPublisher(node_handle, "MarkerArray", 1));
@@ -135,14 +135,14 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   // ROS API: Action interface
   action_server_.reset(
       new ActionServer(node_handle, "follow_joint_trajectory",
-                       std::bind(&ShyController::goalCB, this, std::placeholders::_1),
-                       std::bind(&ShyController::cancelCB, this, std::placeholders::_1), false));
+                       std::bind(&ShyCartesianController::goalCB, this, std::placeholders::_1),
+                       std::bind(&ShyCartesianController::cancelCB, this, std::placeholders::_1), false));
   action_server_->start();
 
   return true;
 }
 
-void  ShyController::starting(const ros::Time& /*time*/) {
+void  ShyCartesianController::starting(const ros::Time& /*time*/) {
   franka::RobotState initial_state = state_handle_->getRobotState();
   
   // get jacobian
@@ -167,7 +167,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   ROS_INFO("ShyController: Starting controller");
 }
 
-void ShyController::precompute(int N)
+void ShyCartesianController::precompute(int N)
 {
   // Deformations precompute
   //int N = trajectory_deformed_length;
@@ -205,7 +205,7 @@ void ShyController::precompute(int N)
   // ROS_INFO("Finished precompute");
 }
 
-void  ShyController::update(const ros::Time& time,
+void  ShyCartesianController::update(const ros::Time& time,
                             const ros::Duration& period) {
   // Update time data (this block is taken from the OG joint traj conroller)
   prev_time_data_ = *(time_data_.readFromRT());
@@ -271,7 +271,7 @@ void  ShyController::update(const ros::Time& time,
     
     // Update targets
     position_d_ = trajectory_deformation.row(slow_index) + trajectory_positions.row(slow_index);
-    orientation_d_ = trajectory_orientations.row(slow_index);
+    orientation_d_ = Eigen::Quaterniond(trajectory_orientations.row(slow_index).data());
 
     // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
@@ -294,7 +294,7 @@ void  ShyController::update(const ros::Time& time,
     desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
     setActionFeedback(desired_state, current_state);
 
-    publishTrajectoryMarkers(trajectory_positions);
+    //publishTrajectoryMarkers(trajectory_positions);
   } // end traj deform
   else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
@@ -362,12 +362,12 @@ void  ShyController::update(const ros::Time& time,
   // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
 
-void ShyController::stopping(const ros::Time& /*time*/)
+void ShyCartesianController::stopping(const ros::Time& /*time*/)
 {
   preemptActiveGoal();
 }
 
-void ShyController::setActionFeedback(State& desired_state, State& current_state)
+void ShyCartesianController::setActionFeedback(State& desired_state, State& current_state)
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
   if (!current_active_goal)
@@ -391,7 +391,7 @@ void ShyController::setActionFeedback(State& desired_state, State& current_state
 }
 
 
-Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
+Eigen::Matrix<double, 7, 1>  ShyCartesianController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
     const Eigen::Matrix<double, 7, 1>& tau_J_d) {  // NOLINT (readability-identifier-naming)
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
@@ -405,7 +405,7 @@ Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
 
 // Callback functions are below 
 
-void  ShyController::complianceParamCallback(
+void  ShyCartesianController::complianceParamCallback(
     franka_experiments::cart_compliance_paramConfig& config,
     uint32_t /*level*/) {
   cartesian_stiffness_target_.setIdentity();
@@ -425,7 +425,7 @@ void  ShyController::complianceParamCallback(
   deformed_segment_ratio_target_ = config.deformed_length;
 }
 
-void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj)
+void ShyCartesianController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj)
 {
   num_of_joints = traj.joint_names.size();
   trajectory_length = traj.points.size();
@@ -447,7 +447,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   Eigen::Vector3d translation;
   Eigen::Vector4d orientation;
   for (int i = 0; i < trajectory_length; i++){
-    forwardKinematics(Eigen::MatrixXd(traj.points[i].positions), translation, orientation);
+    forwardKinematics(traj.points[i].positions, translation, orientation);
     trajectory_positions.row(i) = translation.transpose();
     trajectory_orientations.row(i) = orientation.transpose();
     // filling with time differences
@@ -461,7 +461,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
                  trajectory_length, deformed_segment_length, admittance);
 }
 
-void ShyController::downsampleDeformation(int new_N)
+void ShyCartesianController::downsampleDeformation(int new_N)
 {
     // Check if N is greater than original size, return 
     if (new_N > trajectory_length) {
@@ -481,7 +481,7 @@ void ShyController::downsampleDeformation(int new_N)
 
 }
 
-void  ShyController::trajectoryCallback(
+void  ShyCartesianController::trajectoryCallback(
     const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
 
   if (have_trajectory){
@@ -499,7 +499,7 @@ void  ShyController::trajectoryCallback(
   preemptActiveGoal();
 } 
 
-void ShyController::goalCB(GoalHandle gh)
+void ShyCartesianController::goalCB(GoalHandle gh)
 {
   // Preconditions:
   if (robot_mode == franka::RobotMode::kUserStopped || robot_mode == franka::RobotMode::kReflex)
@@ -549,7 +549,7 @@ void ShyController::goalCB(GoalHandle gh)
   goal_handle_timer_.start();
 }
 
-void ShyController::cancelCB(GoalHandle gh)
+void ShyCartesianController::cancelCB(GoalHandle gh)
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
 
@@ -566,7 +566,7 @@ void ShyController::cancelCB(GoalHandle gh)
   }
 }
 
-inline void ShyController::preemptActiveGoal()
+inline void ShyCartesianController::preemptActiveGoal()
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
 
@@ -581,7 +581,7 @@ inline void ShyController::preemptActiveGoal()
 
 // Visualization related things below 
 
-void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
+void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
 {
   if (marker_publisher_ && marker_publisher_->trylock())
   {
@@ -600,7 +600,7 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
     for (int i = 0; i < trajectory.rows(); i++)
     {
       q_def = trajectory.row(i) - trajectory_deformation.row(i);
-      forwardKinematics(q_def.transpose(), translation, orientation);
+      //forwardKinematics(q_def.transpose(), translation, orientation);
       marker.id = i;
       marker.pose.position.x = translation(0);
       marker.pose.position.y = translation(1);
@@ -641,7 +641,7 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
   }
 }
 
-void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency)
+void ShyCartesianController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency)
 {
   visualization_msgs::MarkerArray markers;
   visualization_msgs::Marker marker;
@@ -661,7 +661,7 @@ void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int f
   Eigen::Vector4d orientation;
   for (int i = 0; i < trajectory.rows(); i+=frequency)
   {
-    forwardKinematics(trajectory.row(i).transpose(), translation, orientation);
+    forwardKinematics(trajectory_.points[i].positions, translation, orientation);
     marker.id = i;
     marker.pose.position.x = translation(0);
     marker.pose.position.y = translation(1);
@@ -672,21 +672,21 @@ void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int f
   full_trajectory_markers_ = markers;
 }
 
-Eigen::Matrix<double, 7, 4> ShyController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
+Eigen::Matrix<double, 7, 4> ShyCartesianController::dh_params(const std::vector<double>& joint_variable) 
 {
   // Create DH parameters (data given by maker franka-emika)
-  dh <<   0,      0,        0.333,   joint_variable(0, 0),
-       -M_PI/2,   0,        0,       joint_variable(1, 0),
-        M_PI/2,   0,        0.316,   joint_variable(2, 0),
-        M_PI/2,   0.0825,   0,       joint_variable(3, 0),
-       -M_PI/2,  -0.0825,   0.384,   joint_variable(4, 0),
-        M_PI/2,   0,        0,       joint_variable(5, 0),
-        M_PI/2,   0.088,    0.107,   joint_variable(6, 0);
+  dh <<   0,      0,        0.333,   joint_variable[0],
+       -M_PI/2,   0,        0,       joint_variable[1],
+        M_PI/2,   0,        0.316,   joint_variable[2],
+        M_PI/2,   0.0825,   0,       joint_variable[3],
+       -M_PI/2,  -0.0825,   0.384,   joint_variable[4],
+        M_PI/2,   0,        0,       joint_variable[5],
+        M_PI/2,   0.088,    0.107,   joint_variable[6];
 
   return dh;
 }
 
-Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh) 
+Eigen::Matrix4d ShyCartesianController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4>& dh) 
 {
   double alpha = dh(i, 0);
   double a = dh(i, 1);
@@ -701,7 +701,7 @@ Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4
   return TF;
 }
 
-void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation, Eigen::Vector4d& orientation)
+void ShyCartesianController::forwardKinematics(const std::vector<double>& joint_pose, Eigen::Vector3d& translation, Eigen::Vector4d& orientation)
 {
   Eigen::Matrix<double, 7, 4> dh_parameters = dh_params(joint_pose);
 
@@ -720,11 +720,11 @@ void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_p
   tf::Quaternion tfqt;
   tf3d.getRotation(tfqt);
   translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
-  orientation << tfqt.x(), tfqt.y(), tfqt.z(), tfqt.w();
+  orientation = Eigen::Vector4d(tfqt.x(), tfqt.y(), tfqt.z(), tfqt.w());
 }
 
 
 }  // namespace franka_example_controllers
 
-PLUGINLIB_EXPORT_CLASS(franka_example_controllers::ShyController,   //
+PLUGINLIB_EXPORT_CLASS(franka_example_controllers::ShyCartesianController,   //
                        controller_interface::ControllerBase)
