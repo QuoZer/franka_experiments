@@ -13,6 +13,8 @@
 #include <ros/time.h>
 #include <controller_interface/multi_interface_controller.h>
 #include <dynamic_reconfigure/server.h>
+#include <tf/transform_broadcaster.h>
+#include <tf/transform_datatypes.h>
 
 // actionlib
 #include <actionlib/server/action_server.h>
@@ -153,11 +155,14 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   JointTrajectoryConstPtr trajectory_ptr_;
   // trajectory eigen data
   Eigen::MatrixXd trajectory_positions;
+  Eigen::MatrixXd trajectory_orientations;
   Eigen::MatrixXd trajectory_velocities;
   Eigen::MatrixXi trajectory_times;
   // deformed trajectory eigen data
   Eigen::MatrixXd trajectory_deformation;
-  Eigen::MatrixXd segment_deformation;
+  Eigen::MatrixXd orientation_deformation;
+  Eigen::MatrixXd pos_segment_deformation;
+  Eigen::MatrixXd ori_segment_deformation;
   // trajectory deformation matrixes
   Eigen::MatrixXd A;                    // minimum jerk trajectory model matrix
   Eigen::MatrixXd R;

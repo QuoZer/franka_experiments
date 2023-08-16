@@ -172,7 +172,8 @@ void ShyController::precompute(int N)
   //int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
-  segment_deformation = Eigen::MatrixXd::Zero(N, 6);
+  pos_segment_deformation = Eigen::MatrixXd::Zero(N, 3);
+  ori_segment_deformation = Eigen::MatrixXd::Zero(N, 4);
   Eigen::MatrixXd I = Eigen::MatrixXd::Identity(N, N);
 
   // method from "Trajectory Deformations from Physical Human-Robot Interaction"
@@ -255,30 +256,22 @@ void  ShyController::update(const ros::Time& time,
     Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
-    if (segment_deformation.rows() !=  H.rows() ) {
+    if (pos_segment_deformation.rows() !=  H.rows() ) {
       ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
     }
-
-    // Nx6 = 1x1 * Nx1 * 1x6
-    segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * fh.transpose();
+    
+    //  Nx3 = 1x1 * Nx1 * 1x3
+    pos_segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * fh.block(0, 0, 3, 1).transpose();
 
     int remaining_size = trajectory_deformation.rows() - slow_index;
-    int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
-    
+    int short_vector_effective_size = std::min((int)pos_segment_deformation.rows(), remaining_size);
     // Additions to the map object are reflected in the original matrix
-    trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 7) += segment_deformation.topRows(short_vector_effective_size);
-    // Eigen::Map<Eigen::MatrixXd> sub_vector(trajectory_deformation.data() + slow_index, short_vector_effective_size, 1);
-    // sub_vector += segment_deformation.topRows(short_vector_effective_size);
-
-    // update q_d and qd_d
-    q_d = trajectory_positions.row(slow_index) - trajectory_deformation.row(slow_index);
-    delta_q = trajectory_positions.row(slow_index+1) - trajectory_deformation.row(slow_index+1) - q_d.transpose().row(0);    // ugly and probably dangerous
-    if (slow_index == 0 || slow_index == trajectory_length - 1) 
-      dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
-    else 
-      dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
-
+    trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 3) += pos_segment_deformation.topRows(short_vector_effective_size);
     
+    // Update targets
+    position_d_ = trajectory_deformation.row(slow_index) + trajectory_positions.row(slow_index);
+    orientation_d_ = trajectory_orientations.row(slow_index);
+
     // termination, resetting goal
     RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
     if (slow_index == trajectory_length - 1)
@@ -427,8 +420,9 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   num_of_joints = traj.joint_names.size();
   trajectory_length = traj.points.size();
   // Convert to eigen
-  trajectory_positions    = Eigen::MatrixXd(trajectory_length, 6);
-  trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, 6);
+  trajectory_positions    = Eigen::MatrixXd(trajectory_length, 3);
+  trajectory_orientations = Eigen::MatrixXd(trajectory_length, 4);
+  trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, 7);
   trajectory_velocities   = Eigen::MatrixXd(trajectory_length, 6);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   
@@ -443,11 +437,9 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   Eigen::Vector3d translation;
   Eigen::Vector4d orientation;
   for (int i = 0; i < trajectory_length; i++){
-    forwardKinematics(traj.points[i].positions, translation, orientation);
-    for (int j = 0; j < 6; j++){
-      trajectory_positions(i, j) = traj.points[i].positions[j];
-      // also copy the first N waypoints to trajectory_deform
-    }
+    forwardKinematics(Eigen::MatrixXd(traj.points[i].positions), translation, orientation);
+    trajectory_positions.row(i) = translation.transpose();
+    trajectory_orientations.row(i) = orientation.transpose();
     // filling with time differences
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = traj.points[i].time_from_start.toNSec();
@@ -592,11 +584,12 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
     marker.color.b = 0.0;
 
     Eigen::Vector3d translation;
+    Eigen::Vector4d orientation;
     Eigen::MatrixXd q_def = Eigen::MatrixXd::Zero(1, 7);
     for (int i = 0; i < trajectory.rows(); i++)
     {
       q_def = trajectory.row(i) - trajectory_deformation.row(i);
-      forwardKinematics(q_def.transpose(), translation);
+      forwardKinematics(q_def.transpose(), translation, orientation);
       marker.id = i;
       marker.pose.position.x = translation(0);
       marker.pose.position.y = translation(1);
@@ -654,9 +647,10 @@ void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int f
   marker.color.b = 1.0;
 
   Eigen::Vector3d translation;
+  Eigen::Vector4d orientation;
   for (int i = 0; i < trajectory.rows(); i+=frequency)
   {
-    forwardKinematics(trajectory.row(i).transpose(), translation);
+    forwardKinematics(trajectory.row(i).transpose(), translation, orientation);
     marker.id = i;
     marker.pose.position.x = translation(0);
     marker.pose.position.y = translation(1);
@@ -689,9 +683,9 @@ Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 7, 4
   double q = dh(i, 3);
 
   Eigen::Matrix4d TF;
-  TF << cos(q), -sin(q), 0, a,
+  TF << cos(q),             -sin(q),              0,            a,
         sin(q) * cos(alpha), cos(q) * cos(alpha), -sin(alpha), -sin(alpha) * d,
-        sin(q) * sin(alpha), cos(q) * sin(alpha), cos(alpha), cos(alpha) * d,
+        sin(q) * sin(alpha), cos(q) * sin(alpha),  cos(alpha),  cos(alpha) * d,
         0, 0, 0, 1;
   return TF;
 }
@@ -709,8 +703,13 @@ void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_p
   Eigen::Matrix4d T_67 = TF_matrix(6, dh_parameters);
 
   Eigen::Matrix4d T_07 = T_01 * T_12 * T_23 * T_34 * T_45 * T_56 * T_67;
-
+  tf::Matrix3x3 tf3d(T_07(0, 0), T_07(0, 1), T_07(0, 2),
+                     T_07(1, 0), T_07(1, 1), T_07(1, 2),
+                     T_07(2, 0), T_07(2, 1), T_07(2, 2));
+  tf::Quaternion tfqt;
+  tf3d.getRotation(tfqt);
   translation = Eigen::Block<Eigen::Matrix4d, 3, 1>(T_07, 0, 3);
+  orientation << tfqt.x(), tfqt.y(), tfqt.z(), tfqt.w();
 }
 
 
