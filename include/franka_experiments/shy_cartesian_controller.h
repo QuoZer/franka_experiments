@@ -35,7 +35,7 @@
 #include <realtime_tools/realtime_server_goal_handle.h>
 
 // franka
-#include <franka_experiments/compliance_paramConfig.h>
+#include <franka_experiments/cart_compliance_paramConfig.h>
 #include <franka_hw/franka_model_interface.h>
 #include <franka_hw/franka_state_interface.h>
 #include <hardware_interface/joint_command_interface.h>
@@ -98,7 +98,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
       const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
 
   /* Dynamic reconfigure CB */
-  void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
+  void complianceParamCallback(franka_experiments::cart_compliance_paramConfig& config,
                                uint32_t level);
   /* Trajectory message CB*/
   void trajectoryCallback(const moveit_msgs::DisplayTrajectory::ConstPtr& msg);

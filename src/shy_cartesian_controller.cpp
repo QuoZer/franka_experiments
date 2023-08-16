@@ -20,6 +20,9 @@ namespace franka_example_controllers {
 
 bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
                                       ros::NodeHandle& node_handle) {
+  std::vector<double> cartesian_stiffness_vector;
+  std::vector<double> cartesian_damping_vector;
+
   // save nh
   controller_nh_ = node_handle;
 
@@ -111,7 +114,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
       ros::NodeHandle(node_handle.getNamespace() + "/dynamic_reconfigure_compliance_param_node");
 
   dynamic_server_compliance_param_ = std::make_unique<
-      dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>(
+      dynamic_reconfigure::Server<franka_experiments::cart_compliance_paramConfig>>(
 
       dynamic_reconfigure_compliance_param_node_);
   dynamic_server_compliance_param_->setCallback(
@@ -119,8 +122,6 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
 
   position_d_.setZero();
   orientation_d_.coeffs() << 0.0, 0.0, 0.0, 1.0;
-  position_d_target_.setZero();
-  orientation_d_target_.coeffs() << 0.0, 0.0, 0.0, 1.0;
 
   cartesian_stiffness_.setZero();
   cartesian_damping_.setZero();
@@ -291,12 +292,9 @@ void  ShyController::update(const ros::Time& time,
     desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
     desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
     desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-
     setActionFeedback(desired_state, current_state);
 
     publishTrajectoryMarkers(trajectory_positions);
-
-    //need_recompute = true;
   } // end traj deform
   else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
@@ -408,8 +406,20 @@ Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
 // Callback functions are below 
 
 void  ShyController::complianceParamCallback(
-    franka_experiments::compliance_paramConfig& config,
+    franka_experiments::cart_compliance_paramConfig& config,
     uint32_t /*level*/) {
+  cartesian_stiffness_target_.setIdentity();
+  cartesian_stiffness_target_.topLeftCorner(3, 3)
+      << config.translational_stiffness * Eigen::Matrix3d::Identity();
+  cartesian_stiffness_target_.bottomRightCorner(3, 3)
+      << config.rotational_stiffness * Eigen::Matrix3d::Identity();
+  cartesian_damping_target_.setIdentity();
+  // Damping ratio = 1
+  cartesian_damping_target_.topLeftCorner(3, 3)
+      << 2.0 * sqrt(config.translational_stiffness) * Eigen::Matrix3d::Identity();
+  cartesian_damping_target_.bottomRightCorner(3, 3)
+      << 2.0 * sqrt(config.rotational_stiffness) * Eigen::Matrix3d::Identity();
+  nullspace_stiffness_target_ = config.nullspace_stiffness;
   std::lock_guard<std::mutex> lock(admittance_mutex_);
   admittance_target_ = config.admittance;
   deformed_segment_ratio_target_ = config.deformed_length;
@@ -459,8 +469,9 @@ void ShyController::downsampleDeformation(int new_N)
     }
 
     H = Eigen::MatrixXd(new_N, 1);
-    segment_deformation = Eigen::MatrixXd::Zero(new_N, num_of_joints);
-    
+    pos_segment_deformation = Eigen::MatrixXd::Zero(new_N, 3);
+    ori_segment_deformation = Eigen::MatrixXd::Zero(new_N, 4);
+
     double stride = static_cast<double>(H_full.size() - 1) / (new_N - 1);
 
     for (int i = 0; i < new_N; ++i) {
