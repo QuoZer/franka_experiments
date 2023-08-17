@@ -254,7 +254,7 @@ void  ShyCartesianController::update(const ros::Time& time,
       ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
     }
     
-    //  Nx3 = 1x1 * Nx1 * 1x3
+    //  Nx3 = 1x1 * Nx1 * 1x3   (deforming only position for now)
     pos_segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * fh.block(0, 0, 3, 1).transpose();
 
     int remaining_size = trajectory_deformation.rows() - slow_index;
@@ -300,25 +300,16 @@ void  ShyCartesianController::update(const ros::Time& time,
     downsampleDeformation(deformed_segment_length);
     need_recompute = false;
   }
-  
-  // sanity check   TODO: change to cartesian space
-  // if (!(trajectory_positions.allFinite() && q_d.allFinite() && dq_d.allFinite()))
-  // {
-  //   throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
-  // }
-  // // probably the condition is a bit too basic. 
-  // if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory)
-  // {
-  //   preemptActiveGoal();
-  //   this->startRequest(time_data.uptime);
-  //   ROS_WARN("Trajectory positions are too far from current robot state. Dropping the goal");
-  //   //throw std::runtime_error("Trajectory positions are too far from current robot state");
-  // }
 
   // compute error to desired pose
   // position error
   Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_;
+  if (error.head(3).maxCoeff() > 0.1 || error.head(3).minCoeff() < -0.1) {
+    ROS_WARN("Position error is too big. Dropping the goal");
+    preemptActiveGoal();
+    this->startRequest(time_data.uptime);
+  }
 
   // orientation error
   if (orientation_d_.coeffs().dot(orientation.coeffs()) < 0.0) {
@@ -329,6 +320,12 @@ void  ShyCartesianController::update(const ros::Time& time,
   error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
   // Transform to base frame
   error.tail(3) << -transform.rotation() * error.tail(3);
+
+  if (!error.allFinite()) {
+    ROS_ERROR("Error is not finite. Stopping the controller.");
+    preemptActiveGoal();
+    this->stopRequest(time_data.uptime);
+  }
 
   // compute control
   // allocate variables
@@ -345,8 +342,8 @@ void  ShyCartesianController::update(const ros::Time& time,
   // nullspace PD control with damping ratio = 1
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                     jacobian.transpose() * jacobian_transpose_pinv) *
-                       (nullspace_stiffness_ * (q_d_nullspace_ - q) -
-                        (2.0 * sqrt(nullspace_stiffness_)) * dq);
+                    (nullspace_stiffness_ * (q_d_nullspace_ - q) -
+                    (2.0 * sqrt(nullspace_stiffness_)) * dq);
   // Desired torque
   tau_d << tau_task + tau_nullspace + coriolis;
   // Saturate torque rate to avoid discontinuities
