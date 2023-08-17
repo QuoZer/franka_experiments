@@ -341,16 +341,13 @@ void  ShyCartesianController::update(const ros::Time& time,
     preemptActiveGoal();
     this->stopRequest(time_data.uptime);
   }
-
   // compute control
   // allocate variables
   Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7);
-
   // pseudoinverse for nullspace handling
   // kinematic pseuoinverse
   Eigen::MatrixXd jacobian_transpose_pinv;
   pseudoInverse(jacobian.transpose(), jacobian_transpose_pinv);
-
   // Cartesian PD control with damping ratio = 1
   tau_task << jacobian.transpose() *
                   (-cartesian_stiffness_ * error - cartesian_damping_ * (jacobian * dq));
