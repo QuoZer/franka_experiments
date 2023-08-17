@@ -291,7 +291,7 @@ void  ShyCartesianController::update(const ros::Time& time,
     // desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
     // setActionFeedback(desired_state, current_state);
 
-    publishTrajectoryMarkers(trajectory_positions);
+    publishTrajectoryMarkers(trajectory_positions, 1);
   } // end traj deform
   else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
@@ -581,7 +581,7 @@ inline void ShyCartesianController::preemptActiveGoal()
 
 // Visualization related things below 
 
-void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
+void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency)
 {
   if (marker_publisher_ && marker_publisher_->trylock())
   {
@@ -597,7 +597,8 @@ void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajector
     Eigen::Vector3d translation;
     Eigen::Vector4d orientation;
     Eigen::MatrixXd q_def = Eigen::MatrixXd::Zero(1, 7);
-    for (int i = 0; i < trajectory.rows(); i++)
+    int target_index = (int)std::min(slow_index + deformed_segment_length, trajectory_length - 1) / frequency;
+    for (int i = 0; i < trajectory.rows(); i+=frequency)
     {
       //Sq_def = trajectory.row(i) - trajectory_deformation.row(i);
       translation = trajectory_positions.row(i) + trajectory_deformation.row(i);
@@ -606,7 +607,7 @@ void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajector
       marker.pose.position.x = translation(0);
       marker.pose.position.y = translation(1);
       marker.pose.position.z = translation(2);
-      if (i == deformed_segment_length+slow_index) {   // deformation horizon
+      if (i == target_index) {   // deformation horizon
         marker.color.r = 1.0;
         marker.color.g = 0.0;
         marker.scale.x = 0.02;
@@ -635,7 +636,7 @@ void ShyCartesianController::publishTrajectoryMarkers(Eigen::MatrixXd& trajector
     markers.markers.push_back(marker);
     // Append full trajectory markers
     markers.markers.insert(markers.markers.end(), full_trajectory_markers_.markers.begin(), full_trajectory_markers_.markers.end());
-    if (slow_index == trajectory_length - 1) markers.markers.clear(); // clear markers if trajectory is finished
+    if (slow_index == trajectory_length) markers.markers.clear(); // clear markers if trajectory is finished
     marker_publisher_->msg_ = markers;
     marker_publisher_->unlockAndPublish();
 

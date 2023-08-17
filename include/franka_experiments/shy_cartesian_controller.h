@@ -110,7 +110,7 @@ class  ShyCartesianController : public controller_interface::MultiInterfaceContr
   /* Form and send action feedback TODO */
   void setActionFeedback(State& desired_state, State& current_state);
   /* Send updated trajectory visualization */
-  void publishTrajectoryMarkers(Eigen::MatrixXd& trajectory);
+  void publishTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency);
   /* Fill a full original trajectory marker vector */
   void fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency);
 
