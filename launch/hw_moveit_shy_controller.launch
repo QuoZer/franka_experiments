@@ -5,6 +5,7 @@
   <arg name="rate" default="60"/>
   <arg name="publish_rate" default="60"/>
   <arg name="load_gripper" />
+  <!-- Name of the controller: shy_controller, shy_cartesian_controller  -->
   <arg name="controller" default="shy_cartesian_controller" /> 
 
   <!-- Launch real-robot control -->
@@ -12,12 +13,11 @@
 
   <!-- Start ROS controllers -->
     <!-- Load joint controller configurations from YAML file to parameter server -->
+  <include file="$(find panda_moveit_config)/launch/panda_moveit_controller_manager.launch.xml" />
   <rosparam file="$(find panda_moveit_config)/config/ros_controllers.yaml" command="load"  subst_value="true"/>
   <rosparam file="$(find franka_experiments)/config/hw_controllers.yaml"   command="load"  subst_value="true"/>
-
-  <include file="$(find panda_moveit_config)/launch/panda_moveit_controller_manager.launch.xml" />
-
   <rosparam command="load" file="$(find franka_experiments)/config/franka_example_controllers.yaml" subst_value="true" />
+
   <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="$(arg controller)"/>
   
   <!-- as well as MoveIt demo -->
