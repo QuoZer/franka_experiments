@@ -38,25 +38,25 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
   std::vector<std::string> joint_names;
   if (!node_handle.getParam("joint_names", joint_names) || joint_names.size() != 7) {
     ROS_ERROR(
-        " ShyController: Invalid or no joint_names parameters provided, "
+        " ShyCartesianController: Invalid or no joint_names parameters provided, "
         "aborting controller init!");
     return false;
   }
 
   if (!node_handle.getParam("trajectory_deformed_length", deformed_segment_length)) {
-    ROS_ERROR_STREAM(" ShyController: Could not read parameter trajectory_deformed_length");
+    ROS_ERROR_STREAM(" ShyCartesianController: Could not read parameter trajectory_deformed_length");
     return false;
   }
   
   if (!node_handle.getParam("admittance", admittance)) {
-    ROS_ERROR_STREAM(" ShyController: Could not read parameter admittance");
+    ROS_ERROR_STREAM(" ShyCartesianController: Could not read parameter admittance");
     return false;
   }
 
   auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
   if (model_interface == nullptr) {
     ROS_ERROR_STREAM(
-        " ShyController: Error getting model interface from hardware");
+        " ShyCartesianController: Error getting model interface from hardware");
     return false;
   }
   try {
@@ -64,7 +64,7 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
         model_interface->getHandle(arm_id + "_model"));
   } catch (hardware_interface::HardwareInterfaceException& ex) {
     ROS_ERROR_STREAM(
-        " ShyController: Exception getting model handle from interface: "
+        " ShyCartesianController: Exception getting model handle from interface: "
         << ex.what());
     return false;
   }
@@ -72,7 +72,7 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
   auto* state_interface = robot_hw->get<franka_hw::FrankaStateInterface>();
   if (state_interface == nullptr) {
     ROS_ERROR_STREAM(
-        " ShyController: Error getting state interface from hardware");
+        " ShyCartesianController: Error getting state interface from hardware");
     return false;
   }
   try {
@@ -80,7 +80,7 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
         state_interface->getHandle(arm_id + "_robot"));
   } catch (hardware_interface::HardwareInterfaceException& ex) {
     ROS_ERROR_STREAM(
-        " ShyController: Exception getting state handle from interface: "
+        " ShyCartesianController: Exception getting state handle from interface: "
         << ex.what());
     return false;
   }
@@ -88,7 +88,7 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
   auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
   if (effort_joint_interface == nullptr) {
     ROS_ERROR_STREAM(
-        " ShyController: Error getting effort joint interface from hardware");
+        " ShyCartesianController: Error getting effort joint interface from hardware");
     return false;
   }
   for (size_t i = 0; i < 7; ++i) {
@@ -96,7 +96,7 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
       joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
     } catch (const hardware_interface::HardwareInterfaceException& ex) {
       ROS_ERROR_STREAM(
-          " ShyController: Exception getting joint handles: " << ex.what());
+          " ShyCartesianController: Exception getting joint handles: " << ex.what());
       return false;
     }
   }
@@ -157,7 +157,7 @@ void  ShyCartesianController::starting(const ros::Time& /*time*/) {
   deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
   precompute(deformed_segment_length);
 
-  ROS_INFO("ShyController: Starting controller");
+  ROS_INFO("ShyCartesianController: Starting controller");
 }
 
 void ShyCartesianController::precompute(int N)
@@ -251,7 +251,7 @@ void  ShyCartesianController::update(const ros::Time& time,
     Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
     if (pos_segment_deformation.rows() !=  H.rows() ) {
-      ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
+      ROS_ERROR("ShyCartesianController: segment_deformation.rows() !=  H.rows()");
     }
     
     //  Nx3 = 1x1 * Nx1 * 1x3   (deforming only position for now)
