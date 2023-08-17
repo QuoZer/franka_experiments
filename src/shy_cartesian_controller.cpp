@@ -305,7 +305,8 @@ void  ShyCartesianController::update(const ros::Time& time,
   // position error
   Eigen::Matrix<double, 6, 1> error;
   error.head(3) << position - position_d_;
-  if (error.head(3).maxCoeff() > 0.1 || error.head(3).minCoeff() < -0.1) {
+  if (have_trajectory && (error.head(3).maxCoeff() > 0.1 || error.head(3).minCoeff() < -0.1)) 
+  {
     ROS_WARN("Position error is too big. Dropping the goal");
     preemptActiveGoal();
     this->startRequest(time_data.uptime);
