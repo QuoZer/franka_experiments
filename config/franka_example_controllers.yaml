@@ -11,6 +11,7 @@ shy_cartesian_controller:
         - $(arg arm_id)_joint7
     trajectory_deformed_length: 10
     admittance: 0.002
+    force_non_sensitivity_threshold: [-4, 2, 2, 1, 0.8, -0.2]
 
 shy_controller:
     type: franka_example_controllers/ShyController
@@ -39,6 +40,7 @@ shy_controller:
         - 7.0
         - 7.0
         - 7.0
+    torque_non_sensitivity_threshold: [-0.5, -0.75, 0.2, -0.42, 0.26, -0.09, -0.13]
     coriolis_factor: 1.0
     trajectory_deformed_length: 10
     admittance: 0.001    
