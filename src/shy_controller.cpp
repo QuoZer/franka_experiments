@@ -221,13 +221,6 @@ void  ShyController::update(const ros::Time& time,
   std::array<double, 42> jacobian_array =
       model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
 
-  // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
-  State desired_state;  
-  State current_state;
-  current_state.position = std::vector<double>(robot_state.q.data(), robot_state.q.data() + robot_state.q.size());
-  current_state.velocity = std::vector<double>(robot_state.dq.data(), robot_state.dq.data() + robot_state.dq.size());
-  current_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-
   // convert to Eigen
   Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
   Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
@@ -251,63 +244,23 @@ void  ShyController::update(const ros::Time& time,
   {
     slow_index++;
     fast_index = 0;
-    //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
-    Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
-
-    // Nx7 = 1x1 * Nx1 * 1x7
-    if (segment_deformation.rows() !=  H.rows() ) {
-      ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
-    }
-
-    segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
-
-    int remaining_size = trajectory_deformation.rows() - slow_index;
-    int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
     
-    // Additions to the map object are reflected in the original matrix
-    trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 7) += segment_deformation.topRows(short_vector_effective_size);
-    // Eigen::Map<Eigen::MatrixXd> sub_vector(trajectory_deformation.data() + slow_index, short_vector_effective_size, 1);
-    // sub_vector += segment_deformation.topRows(short_vector_effective_size);
-
-    // update q_d and qd_d
-    q_d = trajectory_positions.row(slow_index) - trajectory_deformation.row(slow_index);
-    delta_q = trajectory_positions.row(slow_index+1) - trajectory_deformation.row(slow_index+1) - q_d.transpose().row(0);    // ugly and probably dangerous
-    if (slow_index == 0 || slow_index == trajectory_length - 1) 
-      dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
-    else 
-      dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
-
+    getDeformedGoal(robot_state, q_d, dq_d);
     
     // termination, resetting goal
-    RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
     if (slow_index == trajectory_length - 1)
     {
-      ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
-      slow_index = 0;
-      have_trajectory = false;
-      if (current_active_goal) {
-        current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
-        current_active_goal->runNonRealtime(ros::TimerEvent());                              // now it works. doesn't look realtime-safe though
-        current_active_goal.reset(); 
-        rt_active_goal_.reset();
-      }
+      successActiveGoal();
     }
 
-    desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
-    desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
-    desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-
-    setActionFeedback(desired_state, current_state);
+    setActionFeedback(time_data, robot_state, q_d, dq_d);
 
     publishTrajectoryMarkers(trajectory_positions);
-
-    //need_recompute = true;
   } // end traj deform
   else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
-    deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
-    // testing with regular recompute
+    int computed_length = static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio));
+    deformed_segment_length = static_cast<int>(std::max(10, computed_length)); 
     downsampleDeformation(deformed_segment_length);
     need_recompute = false;
   }
@@ -351,7 +304,9 @@ void ShyController::stopping(const ros::Time& /*time*/)
   preemptActiveGoal();
 }
 
-void ShyController::getDeformedGoal(const franka::RobotState& robot_state,  Eigen::Matrix<double, 7, 1>& q_d, Eigen::Matrix<double, 7, 1> dq_d)
+void ShyController::getDeformedGoal(franka::RobotState& robot_state,  
+                                    Eigen::Matrix<double, 7, 1>& q_d, 
+                                    Eigen::Matrix<double, 7, 1>& dq_d)
 {
   //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
@@ -377,22 +332,27 @@ void ShyController::getDeformedGoal(const franka::RobotState& robot_state,  Eige
     dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 }
 
-void ShyController::setActionFeedback(State& desired_state, State& current_state)
+void ShyController::setActionFeedback(const TimeData& time_data, 
+                                      const franka::RobotState& robot_state, 
+                                      Eigen::Matrix<double, 7, 1> q_d, 
+                                      Eigen::Matrix<double, 7, 1> dq_d)
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
   if (!current_active_goal)
   {
     return;
   }
-  
-  current_active_goal->preallocated_feedback_->header.stamp            = time_data_.readFromRT()->time;
-  current_active_goal->preallocated_feedback_->desired.positions       = desired_state.position;
-  current_active_goal->preallocated_feedback_->desired.velocities      = desired_state.velocity;
-  current_active_goal->preallocated_feedback_->desired.accelerations   = desired_state.acceleration;
-  current_active_goal->preallocated_feedback_->desired.time_from_start = desired_state.time_from_start;
-  current_active_goal->preallocated_feedback_->actual.positions        = current_state.position;
-  current_active_goal->preallocated_feedback_->actual.velocities       = current_state.velocity;
-  current_active_goal->preallocated_feedback_->actual.time_from_start  = current_state.time_from_start;
+
+  control_msgs::FollowJointTrajectoryFeedbackPtr feedback = current_active_goal->preallocated_feedback_;
+
+  feedback->header.stamp = time_data_.readFromRT()->time;
+  feedback->desired.positions  = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
+  feedback->desired.velocities      =  std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
+  feedback->desired.accelerations   =  std::vector<double>(7, 0.0);
+  feedback->desired.time_from_start =  ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
+  feedback->actual.positions        =  std::vector<double>(robot_state.q.data(), robot_state.q.data() + robot_state.q.size());
+  feedback->actual.velocities       =  std::vector<double>(robot_state.dq.data(), robot_state.dq.data() + robot_state.dq.size());
+  feedback->actual.time_from_start  =  ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
   // current_active_goal->preallocated_feedback_->error.positions       = state_error_.position;
   // current_active_goal->preallocated_feedback_->error.velocities      = state_error_.velocity;
   // current_active_goal->preallocated_feedback_->error.time_from_start = ros::Duration(state_error_.time_from_start);
@@ -403,7 +363,8 @@ void ShyController::setActionFeedback(State& desired_state, State& current_state
 
 Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
-    const Eigen::Matrix<double, 7, 1>& tau_J_d) {  // NOLINT (readability-identifier-naming)
+    const Eigen::Matrix<double, 7, 1>& tau_J_d) 
+{  // NOLINT (readability-identifier-naming)
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
   for (size_t i = 0; i < 7; i++) {
     double difference = tau_d_calculated[i] - tau_J_d[i];
@@ -569,10 +530,25 @@ inline void ShyController::preemptActiveGoal()
   // Cancels the currently active goal
   if (current_active_goal)
   {
-    // Marks the current goal as canceled
     rt_active_goal_.reset();
     current_active_goal->gh_.setCanceled();
   }
+}
+
+void ShyController::successActiveGoal()
+{
+  RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
+  ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
+  slow_index = 0;
+  have_trajectory = false;
+  if (current_active_goal) {
+    current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
+    current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
+    current_active_goal->runNonRealtime(ros::TimerEvent());                              // now it works. doesn't look realtime-safe though
+    current_active_goal.reset(); 
+    rt_active_goal_.reset();
+  }
+
 }
 
 // Visualization related things below 

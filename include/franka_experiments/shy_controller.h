@@ -90,7 +90,9 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   /* \brief Downsample the deformation matrix to the desired length */
   void downsampleDeformation(int new_N);
   /* \brief Perform the trajectory deformation and output next goal position and velocity */
-  void getDeformedGoal(const franka::RobotState& robot_state,  Eigen::Matrix<double, 7, 1>& q_d, Eigen::Matrix<double, 7, 1> dq_d);
+  void getDeformedGoal(franka::RobotState& robot_state,  
+                       Eigen::Matrix<double, 7, 1>& q_d, 
+                       Eigen::Matrix<double, 7, 1>& dq_d);
   /* \brief Saturation to avoid discontinuities */
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
@@ -106,8 +108,13 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   /* Cancel the active goal */
   virtual void cancelCB(GoalHandle gh);
   virtual void preemptActiveGoal();
+  /* Set the active goal to SUCCESS state and drop it */
+  void successActiveGoal();
   /* Form and send action feedback TODO */
-  void setActionFeedback(State& desired_state, State& current_state);
+  void setActionFeedback(const TimeData& time_data, 
+                                      const franka::RobotState& robot_state, 
+                                      Eigen::Matrix<double, 7, 1> q_d, 
+                                      Eigen::Matrix<double, 7, 1> dq_d);
   /* Send updated trajectory visualization */
   void publishTrajectoryMarkers(Eigen::MatrixXd& trajectory);
   /* Fill a full original trajectory marker vector */
