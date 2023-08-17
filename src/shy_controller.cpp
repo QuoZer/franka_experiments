@@ -351,6 +351,32 @@ void ShyController::stopping(const ros::Time& /*time*/)
   preemptActiveGoal();
 }
 
+void ShyController::getDeformedGoal(const franka::RobotState& robot_state,  Eigen::Matrix<double, 7, 1>& q_d, Eigen::Matrix<double, 7, 1> dq_d)
+{
+  //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
+
+  // Nx7 = 1x1 * Nx1 * 1x7
+  if (segment_deformation.rows() !=  H.rows() ) {
+    ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
+  }
+
+  segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+
+  int remaining_size = trajectory_deformation.rows() - slow_index;
+  int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
+  // Additions to the map object are reflected in the original matrix
+  trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 7) += segment_deformation.topRows(short_vector_effective_size);
+
+  // update q_d and qd_d
+  q_d = trajectory_positions.row(slow_index) - trajectory_deformation.row(slow_index);
+  delta_q = trajectory_positions.row(slow_index+1) - trajectory_deformation.row(slow_index+1) - q_d.transpose().row(0);    // ugly and probably dangerous
+  if (slow_index == 0 || slow_index == trajectory_length - 1) 
+    dq_d = Eigen::MatrixXd::Zero(7, 1).row(0);    // zero velocity at the start and end
+  else 
+    dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
+}
+
 void ShyController::setActionFeedback(State& desired_state, State& current_state)
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);

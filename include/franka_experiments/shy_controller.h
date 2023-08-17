@@ -89,7 +89,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void precompute(int N);
   /* \brief Downsample the deformation matrix to the desired length */
   void downsampleDeformation(int new_N);
-
+  /* \brief Perform the trajectory deformation and output next goal position and velocity */
+  void getDeformedGoal(const franka::RobotState& robot_state,  Eigen::Matrix<double, 7, 1>& q_d, Eigen::Matrix<double, 7, 1> dq_d);
   /* \brief Saturation to avoid discontinuities */
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
