@@ -109,8 +109,6 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
     return false;
   }
   force_thresholds_vector = Eigen::Matrix<double, 6, 1>(force_thresholds.data());
-  ROS_INFO("force_thresh: %f, %f, %f, %f, %f, %f", force_thresholds_vector(0), force_thresholds_vector(1), force_thresholds_vector(2), force_thresholds_vector(3), force_thresholds_vector(4), force_thresholds_vector(5));
-
 
   dynamic_reconfigure_compliance_param_node_ =
       ros::NodeHandle(node_handle.getNamespace() + "/dynamic_reconfigure_compliance_param_node");
