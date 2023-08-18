@@ -46,10 +46,12 @@ class  ShyController : public controller_interface::MultiInterfaceController<
                                                 hardware_interface::EffortJointInterface,
                                                 franka_hw::FrankaStateInterface> {
  public:
-  /* functions called by a controller manager */
-  bool init(hardware_interface::RobotHW* robot_hw, ros::NodeHandle& node_handle) override;
+  /* Functions called by a controller manager */
+  bool init(hardware_interface::RobotHW* robot_hw, 
+            ros::NodeHandle& node_handle) override;
   void starting(const ros::Time&) override;
-  void update(const ros::Time&, const ros::Duration& period) override;
+  void update(const ros::Time& time, 
+              const ros::Duration& period) override;
   void stopping(const ros::Time& /*time*/) override;
 
  private:
@@ -63,7 +65,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
     ros::Time     uptime; ///< Controller uptime. Set to zero at every restart.
   };
 
-/* Joint states data structure*/
+/* Joint states data structure (not needed anymore?)*/
   struct State
   {
     State() : position(7, 0.0), velocity(7, 0.0), acceleration(7, 0.0), time_from_start(0.0) {} 
@@ -73,7 +75,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
     std::vector<double> acceleration;
     ros::Duration time_from_start;
   };
-
+/* Type aliases */
   typedef actionlib::ActionServer<control_msgs::FollowJointTrajectoryAction>                  ActionServer;
   typedef std::shared_ptr<ActionServer>                                                       ActionServerPtr;
   typedef ActionServer::GoalHandle                                                            GoalHandle;
@@ -83,17 +85,47 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   typedef realtime_tools::RealtimePublisher<visualization_msgs::MarkerArray>                  MarkerPublisher;
   typedef std::unique_ptr<MarkerPublisher>                                                    MarkerPublisherPtr;
 
-  /* \brief Reads and saves trajectory message into internal data structures */
+  /*
+  Parse and save a trajectory message into internal data structures 
+  
+    \param traj The received joint trajectory 
+  */
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
-  /* \brief Generates the trajectory deformation matrix based on the deformation length  */
+
+  /* 
+  Generates the trajectory deformation matrix based on the deformation length  
+
+    \param N Length of the deformation vector
+  */
   void precompute(int N);
-  /* \brief Downsample the deformation matrix to the desired length */
+
+  /* 
+  Downsample the deformation vector to the desired length.
+
+    \param new_N desired length of the new deformaton vector. Will be kept 
+    between 10 and the trajectory length 
+  */
   void downsampleDeformation(int new_N);
-  /* \brief Perform the trajectory deformation and output next goal position and velocity */
+
+  /* 
+  Perform the trajectory deformation and output next goal position and velocity 
+
+    \param[in] robot_state The current tobot state 
+    \param[out] q_d Desired joint positions are returned through this reference 
+    \param[out] dq_d Desired joint velocities are returned through this reference 
+  */
   void getDeformedGoal(franka::RobotState& robot_state,  
                        Eigen::Matrix<double, 7, 1>& q_d, 
                        Eigen::Matrix<double, 7, 1>& dq_d);
-  /* \brief Saturation to avoid discontinuities */
+
+  /* 
+  Saturate to avoid discontinuities. Maximum torque difference with a sampling 
+  rate of 1 kHz. The maximum torque rate is 1000 * (1 / sampling_time).
+  
+    \param  tau_d_calculated The calculated desired torque values 
+    \param  tau_J_d Desired link-side joint torque sensor signals without gravity.
+    \returns Saturated torque rate
+  */
   Eigen::Matrix<double, 7, 1> saturateTorqueRate(
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
       const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
