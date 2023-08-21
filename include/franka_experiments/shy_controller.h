@@ -93,7 +93,8 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   void parseTrajectory(const trajectory_msgs::JointTrajectory& traj);
 
   /* 
-  Generates the trajectory deformation matrix based on the deformation length  
+  Generates the trajectory deformation matrix based on the deformation length. 
+  Takes rather long, avoid using in the control loop.
 
     \param N Length of the deformation vector
   */
@@ -142,14 +143,33 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   virtual void preemptActiveGoal();
   /* Set the active goal to SUCCESS state and drop it */
   void successActiveGoal();
-  /* Form and send action feedback TODO */
+
+  /* 
+  Form and send action feedback  
+  
+  \param time_data Current time data structure
+  \param robot_state Current robot state
+  \param q_d Desired joint positions
+  \param dq_d Desired joint velocities
+  */
   void setActionFeedback(const TimeData& time_data, 
                                       const franka::RobotState& robot_state, 
                                       Eigen::Matrix<double, 7, 1> q_d, 
                                       Eigen::Matrix<double, 7, 1> dq_d);
-  /* Send updated trajectory visualization */
+
+  /* 
+  Send updated trajectory visualization (e.g. with deformation)
+  
+  \param trajectory Trajectory you want to visualize in addition to the not deformed one
+  */
   void publishTrajectoryMarkers(Eigen::MatrixXd& trajectory);
-  /* Fill a full original trajectory marker vector */
+
+  /* 
+  Fill the original undeformed trajectory marker vector (blue)
+
+  \param trajectory The original trajectory
+  \param frequency  Specify to downsample the trajectory markers for visulization
+  */
   void fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency);
 
   // Viz markers
@@ -182,18 +202,19 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   std::string robot_model_ = "panda";
   bool have_trajectory = false; 
   bool need_recompute = true;
-  int trajectory_sample_time = 0;       // delta, nsecs
   int num_of_joints = 7;
+  int trajectory_sample_time = 0;       // delta, nsecs
   int trajectory_length = 0;            // samples  
   int fast_index = -1;                  // index of the fast update loop
   int slow_index = -1;                  // index of the slow (trajectory waypoint) update loop
-  franka::RobotMode robot_mode;
+  franka::RobotMode robot_mode;         // store the current robot mode
+
   // trajectory message
   trajectory_msgs::JointTrajectory trajectory_;
   JointTrajectoryConstPtr trajectory_ptr_;
-  // trajectory eigen data
+
+  // trajectory eigen data structures
   Eigen::MatrixXd trajectory_positions;
-  Eigen::MatrixXd trajectory_velocities;
   Eigen::MatrixXi trajectory_times;
   // deformed trajectory eigen data
   Eigen::MatrixXd trajectory_deformation;

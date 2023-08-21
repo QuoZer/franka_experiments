@@ -389,7 +389,6 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   // Convert to eigen
   trajectory_positions    = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, num_of_joints);
-  trajectory_velocities   = Eigen::MatrixXd(trajectory_length, num_of_joints);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   
   // update from dynamic reconfigure
@@ -402,7 +401,6 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   for (int i = 0; i < trajectory_length; i++){
     for (int j = 0; j < num_of_joints; j++){
       trajectory_positions(i, j) = traj.points[i].positions[j];
-      trajectory_velocities(i, j) = traj.points[i].velocities[j];
       // also copy the first N waypoints to trajectory_deform
     }
     // filling with time differences
