@@ -46,7 +46,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
                                                 hardware_interface::EffortJointInterface,
                                                 franka_hw::FrankaStateInterface> {
  public:
-  /* Functions called by a controller manager */
+// Functions called by a controller manager 
   bool init(hardware_interface::RobotHW* robot_hw, 
             ros::NodeHandle& node_handle) override;
   void starting(const ros::Time&) override;
@@ -85,6 +85,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   typedef realtime_tools::RealtimePublisher<visualization_msgs::MarkerArray>                  MarkerPublisher;
   typedef std::unique_ptr<MarkerPublisher>                                                    MarkerPublisherPtr;
 
+// Deforamtion related functions
   /*
   Parse and save a trajectory message into internal data structures 
   
@@ -131,6 +132,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
       const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
       const Eigen::Matrix<double, 7, 1>& tau_J_d);  // NOLINT (readability-identifier-naming)
 
+// Callbacks and action stuff
   /* Dynamic reconfigure CB */
   void complianceParamCallback(franka_experiments::compliance_paramConfig& config,
                                uint32_t level);
@@ -157,6 +159,7 @@ class  ShyController : public controller_interface::MultiInterfaceController<
                                       Eigen::Matrix<double, 7, 1> q_d, 
                                       Eigen::Matrix<double, 7, 1> dq_d);
 
+// Viz markers
   /* 
   Send updated trajectory visualization (e.g. with deformation)
   
@@ -172,7 +175,6 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   */
   void fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency);
 
-  // Viz markers
   visualization_msgs::MarkerArray full_trajectory_markers_;
   Eigen::Matrix<double, 8, 4> dh;
   /* Calc DH matrix for the given configuration */
@@ -182,23 +184,23 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   /* Get translation vector from the given configuration */
   void forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation);
 
-  // time structures
+// time structures
   realtime_tools::RealtimeBuffer<TimeData> time_data_;
   TimeData prev_time_data_;
   ros::Timer goal_handle_timer_;
   int loop_sample_time = 1000000;      // nsec
   double action_monitor_rate = 20.0;   // Hz
 
-  // Hardware interfaces
+// Hardware interfaces
   std::unique_ptr<franka_hw::FrankaStateHandle> state_handle_;
   std::unique_ptr<franka_hw::FrankaModelHandle> model_handle_;
   std::vector<hardware_interface::JointHandle> joint_handles_;
   
-  // Trajectory action stuff 
+// Trajectory action stuff 
   ActionServerPtr       action_server_;
   RealtimeGoalHandlePtr rt_active_goal_;     ///< Currently active action goal, if any.
   
-  // Trajectory deformation stuff
+// Trajectory deformation stuff
   std::string robot_model_ = "panda";
   bool have_trajectory = false; 
   bool need_recompute = true;
@@ -209,18 +211,18 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   int slow_index = -1;                  // index of the slow (trajectory waypoint) update loop
   franka::RobotMode robot_mode;         // store the current robot mode
 
-  // trajectory message
+// trajectory message
   trajectory_msgs::JointTrajectory trajectory_;
   JointTrajectoryConstPtr trajectory_ptr_;
 
-  // trajectory eigen data structures
+// trajectory eigen data structures
   Eigen::MatrixXd trajectory_positions;
   Eigen::MatrixXi trajectory_times;     // stores time deltas between consequent trajectory points in nsecs 
 
-  // deformed trajectory eigen data
+// deformed trajectory eigen data
   Eigen::MatrixXd trajectory_deformation; // deformation of the whole trajectory
   Eigen::MatrixXd segment_deformation;    // deformation of the current segment (slow_index, slow_index+N)
-  // trajectory deformation matrixes
+// trajectory deformation matrixes
   Eigen::MatrixXd A;                    // minimum jerk trajectory model matrix
   Eigen::MatrixXd R;
   Eigen::MatrixXd B;                    // waypoint paramtrization matrix
@@ -230,20 +232,20 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   Eigen::MatrixXd unit;                 // unit vector Nx1
   Eigen::MatrixXd Uh;                   // zero Nx1 for u
 
-  // Desired state
+// Desired state
   Eigen::Matrix<double, 7, 1> dq_filtered_;
   Eigen::Matrix<double, 7, 1> q_d, delta_q, dq_d;      // desired joint position and velocity  
   Eigen::Matrix<double, 7, 1> tau_d_calculated;
   Eigen::Matrix<double, 7, 1> tau_d_saturated;
 
-  // PARAMETERS`
+// PARAMETERS`
   Eigen::MatrixXd k_gains_;
   Eigen::MatrixXd d_gains_;
   std::mutex admittance_mutex_;
   double coriolis_factor_{1.0};
-  double admittance = 0;                      // nu  
-  double admittance_target_ = 0;              // nu for dynamic reconf
-  int deformed_segment_length = 5;            // N, number of samples
+  double admittance = 0;                        // nu  
+  double admittance_target_ = 0;                // nu for dynamic reconf
+  int deformed_segment_length = 5;              // N, number of samples
   double deformed_segment_ratio_target_ = 0.1;  // proportion of the full length target for dynamic reconf
   double deformed_segment_ratio = 0.1;          // proportion of the full length for dynamic reconf
   int time_scaling_factor = 1;                  // HACK to reduce velocity
@@ -251,13 +253,13 @@ class  ShyController : public controller_interface::MultiInterfaceController<
   double filter_params_{0.005};
   const double delta_tau_max_{1.0};
 
-  // ROS things
+// ROS things
   ros::NodeHandle controller_nh_;
   ros::Subscriber sub_trajectory_;              // trajectory subscriber (alternative to the action interface)
-  // ros::Subscriber trajectory_command_sub_;
-  MarkerPublisherPtr marker_publisher_; 
+// ros::Subscriber trajectory_command_sub_;
+  MarkerPublisherPtr marker_publisher_;         // MarkerArray publisher for visualization
 
-  // Dynamic reconfigure
+// Dynamic reconfigure
   std::unique_ptr<dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>
       dynamic_server_compliance_param_;
   ros::NodeHandle dynamic_reconfigure_compliance_param_node_;
