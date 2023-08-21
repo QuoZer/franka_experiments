@@ -13,8 +13,6 @@
 
 #include <franka_experiments/pseudo_inversion.h>
 
-// The other method works better
-//#define ALT_METHOD
 
 namespace franka_example_controllers {
 
@@ -155,7 +153,7 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   // set target positions to initial position
   q_d = q_initial;
   dq_initial.fill(0);
-  dq_d = dq_initial;    // zero
+  dq_d = dq_initial;   
   delta_q = dq_initial;
   
   have_trajectory = false; // to be sure
@@ -170,7 +168,6 @@ void  ShyController::starting(const ros::Time& /*time*/) {
 void ShyController::precompute(int N)
 {
   // Deformations precompute
-  //int N = trajectory_deformed_length;
   unit = Eigen::MatrixXd::Ones(N, 1);
   Uh = Eigen::MatrixXd::Zero(N, 7);
   segment_deformation     = Eigen::MatrixXd::Zero(N, num_of_joints);
@@ -201,7 +198,7 @@ void ShyController::precompute(int N)
   H_full = std::sqrt(N) * G / G.norm();  
   H = H_full;  
 
-  // ROS_INFO("Finished precompute");
+  ROS_INFO("ShyController: Finished precompute");
 }
 
 void  ShyController::update(const ros::Time& time,
@@ -243,17 +240,17 @@ void  ShyController::update(const ros::Time& time,
   {
     slow_index++;
     fast_index = 0;
-    
+    // apply trajectory deformation and update q_d and dq_d
     getDeformedGoal(robot_state, q_d, dq_d);
     
     // termination, resetting goal
-    if (slow_index == trajectory_length - 1)
+    if (slow_index == trajectory_length - 1)    // closeness check?
     {
       successActiveGoal();
     }
 
-    setActionFeedback(time_data, robot_state, q_d, dq_d);
-    publishTrajectoryMarkers(trajectory_positions);
+    setActionFeedback(time_data, robot_state, q_d, dq_d); 
+    publishTrajectoryMarkers(trajectory_positions);       // TODO: decouple visualization from deformation loop 
   } // end traj deform
   else if (need_recompute)  // updating the deformation matrix only in timesteps when no deformation takes place for perfomance
   {
@@ -267,8 +264,7 @@ void  ShyController::update(const ros::Time& time,
   {
     throw std::runtime_error("Trajectory positions, q_d or dq_d are not finite");
   }
-  // probably the condition is a bit too basic. 
-  if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory)
+  if ( ( (q_d-q).maxCoeff() > 0.1 || (q_d-q).minCoeff() < -0.1) && have_trajectory) // probably the condition is a bit too basic. 
   {
     preemptActiveGoal();
     this->startRequest(time_data.uptime);
@@ -285,15 +281,12 @@ void  ShyController::update(const ros::Time& time,
                             d_gains_ * (dq_d - dq_filtered_);
       
   // saturation to avoid discontinuities
-  // Maximum torque difference with a sampling rate of 1 kHz. The maximum torque rate is
-  // 1000 * (1 / sampling_time).
   tau_d_saturated = saturateTorqueRate(tau_d_calculated, tau_J_d);
   // sending tau to the robot
   for (size_t i = 0; i < 7; ++i) {
     joint_handles_[i].setCommand(tau_d_saturated[i]);
   }
 
-  // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
 }  // end update()
 
 void ShyController::stopping(const ros::Time& /*time*/)
@@ -305,14 +298,13 @@ void ShyController::getDeformedGoal(franka::RobotState& robot_state,
                                     Eigen::Matrix<double, 7, 1>& q_d, 
                                     Eigen::Matrix<double, 7, 1>& dq_d)
 {
-  //Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
   Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
-  // Nx7 = 1x1 * Nx1 * 1x7
   if (segment_deformation.rows() !=  H.rows() ) {
     ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
   }
 
+  // Nx7 = 1x1 * Nx1 * 1x7
   segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
 
   int remaining_size = trajectory_deformation.rows() - slow_index;
@@ -343,7 +335,7 @@ void ShyController::setActionFeedback(const TimeData& time_data,
   control_msgs::FollowJointTrajectoryFeedbackPtr feedback = current_active_goal->preallocated_feedback_;
 
   feedback->header.stamp = time_data_.readFromRT()->time;
-  feedback->desired.positions  = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
+  feedback->desired.positions       = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
   feedback->desired.velocities      =  std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
   feedback->desired.accelerations   =  std::vector<double>(7, 0.0);
   feedback->desired.time_from_start =  ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
@@ -357,11 +349,10 @@ void ShyController::setActionFeedback(const TimeData& time_data,
 
 }
 
-
 Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
     const Eigen::Matrix<double, 7, 1>& tau_J_d) 
-{  // NOLINT (readability-identifier-naming)
+{  
   Eigen::Matrix<double, 7, 1> tau_d_saturated{};
   for (size_t i = 0; i < 7; i++) {
     double difference = tau_d_calculated[i] - tau_J_d[i];
@@ -371,7 +362,7 @@ Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
   return tau_d_saturated;
 }
 
-// Callback functions are below 
+// Callback functions below 
 
 void  ShyController::complianceParamCallback(
     franka_experiments::compliance_paramConfig& config,
@@ -400,9 +391,8 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
   for (int i = 0; i < trajectory_length; i++){
     for (int j = 0; j < num_of_joints; j++){
       trajectory_positions(i, j) = traj.points[i].positions[j];
-      // also copy the first N waypoints to trajectory_deform
     }
-    // filling with time differences
+    // filling  time differences
     trajectory_times(i, 0) = time_scaling_factor*(traj.points[i].time_from_start.toNSec() - prev_ts);
     prev_ts = traj.points[i].time_from_start.toNSec();
   }
