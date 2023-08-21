@@ -34,3 +34,4 @@ Notable parameters for **shy_controller** testing:
 ## TODO
 - [ ] Simplify launch parameters.
 - [ ] External force autocorrection
+- [ ] Dependencies + franka fci versions
