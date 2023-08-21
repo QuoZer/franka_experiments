@@ -215,43 +215,46 @@ class  ShyController : public controller_interface::MultiInterfaceController<
 
   // trajectory eigen data structures
   Eigen::MatrixXd trajectory_positions;
-  Eigen::MatrixXi trajectory_times;
+  Eigen::MatrixXi trajectory_times;     // stores time deltas between consequent trajectory points in nsecs 
+
   // deformed trajectory eigen data
-  Eigen::MatrixXd trajectory_deformation;
-  Eigen::MatrixXd segment_deformation;
+  Eigen::MatrixXd trajectory_deformation; // deformation of the whole trajectory
+  Eigen::MatrixXd segment_deformation;    // deformation of the current segment (slow_index, slow_index+N)
   // trajectory deformation matrixes
   Eigen::MatrixXd A;                    // minimum jerk trajectory model matrix
   Eigen::MatrixXd R;
   Eigen::MatrixXd B;                    // waypoint paramtrization matrix
   Eigen::MatrixXd G;                    // trajectory deformation matrix        
-  Eigen::MatrixXd H;                    // Shape of optimal variation
-  Eigen::MatrixXd H_full;                    // Shape of optimal variation
+  Eigen::MatrixXd H;                    // Shape of optimal variation (downsampled segment)
+  Eigen::MatrixXd H_full;               // Shape of optimal variation (full trajectory)
   Eigen::MatrixXd unit;                 // unit vector Nx1
   Eigen::MatrixXd Uh;                   // zero Nx1 for u
+
   // Desired state
   Eigen::Matrix<double, 7, 1> dq_filtered_;
   Eigen::Matrix<double, 7, 1> q_d, delta_q, dq_d;      // desired joint position and velocity  
   Eigen::Matrix<double, 7, 1> tau_d_calculated;
   Eigen::Matrix<double, 7, 1> tau_d_saturated;
+
   // PARAMETERS`
   Eigen::MatrixXd k_gains_;
   Eigen::MatrixXd d_gains_;
   std::mutex admittance_mutex_;
-  double admittance = 0;                    // nu  
-  double admittance_target_ = 0;            // nu for dynamic reconf
-  int deformed_segment_length = 5;            // N, number of samples
-  double deformed_segment_ratio_target_ = 0.1; // N for dynamic reconf
-  double deformed_segment_ratio = 0.1;        // N for dynamic reconf
-  int time_scaling_factor = 1;                // HACK to reduce velocity
   double coriolis_factor_{1.0};
+  double admittance = 0;                      // nu  
+  double admittance_target_ = 0;              // nu for dynamic reconf
+  int deformed_segment_length = 5;            // N, number of samples
+  double deformed_segment_ratio_target_ = 0.1;  // proportion of the full length target for dynamic reconf
+  double deformed_segment_ratio = 0.1;          // proportion of the full length for dynamic reconf
+  int time_scaling_factor = 1;                  // HACK to reduce velocity
 
   double filter_params_{0.005};
   const double delta_tau_max_{1.0};
 
   // ROS things
   ros::NodeHandle controller_nh_;
-  ros::Subscriber sub_trajectory_;
-  ros::Subscriber trajectory_command_sub_;
+  ros::Subscriber sub_trajectory_;              // trajectory subscriber (alternative to the action interface)
+  // ros::Subscriber trajectory_command_sub_;
   MarkerPublisherPtr marker_publisher_; 
 
   // Dynamic reconfigure

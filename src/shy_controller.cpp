@@ -23,10 +23,6 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   // save nh
   controller_nh_ = node_handle;
 
-  sub_trajectory_ = node_handle.subscribe(
-      "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
-      ros::TransportHints().reliable().tcpNoDelay());
-
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
     ROS_ERROR_STREAM(" ShyController: Could not read parameter arm_id");
@@ -128,7 +124,10 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
       boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
 
   // ROS API: Subscribed topics
-  trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCallback, this);
+  //trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCallback, this);
+  sub_trajectory_ = node_handle.subscribe(
+      "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
+      ros::TransportHints().reliable().tcpNoDelay());
 
   // ROS API: Published topics
   marker_publisher_.reset(new MarkerPublisher(node_handle, "MarkerArray", 1));
