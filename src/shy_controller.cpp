@@ -13,7 +13,6 @@
 
 #include <franka_experiments/pseudo_inversion.h>
 
-
 namespace franka_example_controllers {
 
 bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
