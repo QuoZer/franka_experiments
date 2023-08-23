@@ -11,6 +11,8 @@ import dynamic_reconfigure.client
 import geometry_msgs.msg
 from std_msgs.msg import String
 import franka_msgs.msg as franka
+from control_msgs.msg import FollowJointTrajectoryActionResult
+from actionlib_msgs.msg import GoalStatusArray
 
 import moveit_commander
 import moveit_msgs.msg
@@ -38,6 +40,10 @@ def all_close(goal, actual, tolerance):
     @param: tolerance  A float
     @returns: bool
     """
+
+    print("Goal: ", goal)
+    print("Actual: ", actual)
+
     if type(goal) is list:
         for index in range(len(goal)):
             if abs(actual[index] - goal[index]) > tolerance:
@@ -61,7 +67,7 @@ def all_close(goal, actual, tolerance):
 class ShyControllerParameterInterface(object):
     """ShyControllerParameterInterface"""
 
-    def __init__(self, velocity_factor):
+    def __init__(self, velocity_factor, update_rate):
         super(ShyControllerParameterInterface, self).__init__()
 
         ## First initialize `moveit_commander`_ and a `rospy`_ node:
@@ -97,6 +103,10 @@ class ShyControllerParameterInterface(object):
         self.robot_state_subscriber = rospy.Subscriber("franka_state_controller/franka_states",
                                                    franka.FrankaState, 
                                                    self.state_callback)
+        # get the goal updates from the controller. Doesn't seem very reliable - update rate is around 5 Hz
+        self.goal_state_subscriber = rospy.Subscriber("shy_controller/follow_joint_trajectory/status",
+                                                     GoalStatusArray, 
+                                                     self.goal_callback)
 
         ## Getting Basic Information
         ## ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -117,13 +127,24 @@ class ShyControllerParameterInterface(object):
         self.box_name = ""
         self.robot = robot
         self.scene = scene
-        self.move_group = move_group
+        self.move_group = move_group # group python class reference
         self.display_trajectory_publisher = display_trajectory_publisher
         self.planning_frame = planning_frame
         self.eef_link = eef_link
         self.group_names = group_names
+        self.goal_status = 3   # 1 - accepted, 3 - success, idle
+        self.prev_goal_status = 3
+        self.loop_rate = rospy.Rate(update_rate)
 
 
+    def goal_callback(self, data: GoalStatusArray):
+        if len(data.status_list) == 0:
+            return
+        
+        self.prev_goal_status = self.goal_status
+        self.goal_status = data.status_list[0].status
+
+        return
 
     def state_callback(self, data: franka.FrankaState):
         self.last_state = data
@@ -138,126 +159,44 @@ class ShyControllerParameterInterface(object):
         self.parameter_updater.update_configuration({"admittance": admittance, "deformed_length": deform_length})
 
         return
-        
-
-    def go_to_joint_state(self):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.move_group
-
-        ## BEGIN_SUB_TUTORIAL plan_to_joint_state
-        ##
-        ## Planning to a Joint Goal
-        ## ^^^^^^^^^^^^^^^^^^^^^^^^
-        ## The Panda's zero configuration is at a `singularity <https://www.quora.com/Robotics-What-is-meant-by-kinematic-singularity>`_, so the first
-        ## thing we want to do is move it to a slightly better configuration.
-        ## We use the constant `tau = 2*pi <https://en.wikipedia.org/wiki/Turn_(angle)#Tau_proposals>`_ for convenience:
-        # We get the joint values from the group and change some of the values:
-        joint_goal = move_group.get_current_joint_values()
-        joint_goal[0] = 0
-        joint_goal[1] = -tau / 8
-        joint_goal[2] = 0
-        joint_goal[3] = -tau / 4
-        joint_goal[4] = 0
-        joint_goal[5] = tau / 6  # 1/6 of a turn
-        joint_goal[6] = 0
-
-        # The go command can be called with joint values, poses, or without any
-        # parameters if you have already set the pose or joint target for the group
-        move_group.go(joint_goal, wait=True)
-
-        # Calling ``stop()`` ensures that there is no residual movement
-        move_group.stop()
-
-        ## END_SUB_TUTORIAL
-
-        # For testing:
-        current_joints = move_group.get_current_joint_values()
-        return all_close(joint_goal, current_joints, 0.01)
-
-    def go_to_pose_goal(self):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.move_group
-
-        ## BEGIN_SUB_TUTORIAL plan_to_pose
-        ##
-        ## Planning to a Pose Goal
-        ## ^^^^^^^^^^^^^^^^^^^^^^^
-        ## We can plan a motion for this group to a desired pose for the
-        ## end-effector:
-        pose_goal = geometry_msgs.msg.Pose()
-        pose_goal.orientation.w = -0.03505
-        pose_goal.orientation.x =  0.90729
-        pose_goal.orientation.y = -0.41821
-        pose_goal.orientation.z =  0.02635
-        pose_goal.position.x = 0.61
-        pose_goal.position.y = -0.03
-        pose_goal.position.z = 0.63
-
-        move_group.set_max_velocity_scaling_factor(0.02)
-        move_group.set_pose_target(pose_goal)
-
-        ## Now, we call the planner to compute the plan and execute it.
-        # `go()` returns a boolean indicating whether the planning and execution was successful.
-        success = move_group.go(wait=True)
-
-        # Calling `stop()` ensures that there is no residual movement
-        move_group.stop()
-        print("Stopping trajectory execution and parameter update")
-        # It is always good to clear your targets after planning with poses.
-        # Note: there is no equivalent function for clear_joint_value_targets().
-        move_group.clear_pose_targets()
-
-        ## END_SUB_TUTORIAL
-
-        # For testing:
-        # Note that since this section of code will not be included in the tutorials
-        # we use the class variable rather than the copied state variable
-        current_pose = self.move_group.get_current_pose().pose
-        return all_close(pose_goal, current_pose, 0.01)
-
-    def plan_cartesian_path(self, scale=1):
-        # Copy class variables to local variables to make the web tutorials more clear.
-        # In practice, you should use the class variables directly unless you have a good
-        # reason not to.
-        move_group = self.move_group
-
-        ## BEGIN_SUB_TUTORIAL plan_cartesian_path
-        ##
-        ## Cartesian Paths
-        ## ^^^^^^^^^^^^^^^
-        ## You can plan a Cartesian path directly by specifying a list of waypoints
-        ## for the end-effector to go through. If executing  interactively in a
-        ## Python shell, set scale = 1.0.
-        ##
-        waypoints = []
-
-        wpose = move_group.get_current_pose().pose
-        wpose.position.y += scale * 0.5  # 
-        waypoints.append(copy.deepcopy(wpose))
-
-        wpose.position.y -= scale * 1.0  # 
-        waypoints.append(copy.deepcopy(wpose))
-
-        wpose.position.y += scale * 0.5  # Third move sideways (y)
-        waypoints.append(copy.deepcopy(wpose))
-
-        # We want the Cartesian path to be interpolated at a resolution of 1 cm
-        # which is why we will specify 0.01 as the eef_step in Cartesian
-        # translation.  We will disable the jump threshold by setting it to 0.0,
-        # ignoring the check for infeasible jumps in joint space, which is sufficient
-        # for this tutorial.
-        move_group.set_max_velocity_scaling_factor(0.01)  # doesn't seem to work
-        (plan, fraction) = move_group.compute_cartesian_path(
-            waypoints, 0.01, 0.0  # waypoints to follow  # eef_step
-        )  # jump_threshold
-
-        # Note: We are just planning, not asking move_group to actually move the robot yet:
-        return plan, fraction
     
+    def go(self, pose_goal, policy):
+        self.move_group.set_pose_target(pose_goal)
+
+        # Waiting for callbacks
+        rospy.sleep(1)
+
+        ## Step 2. Execute the plan (non blocking)
+        success = self.move_group.go(wait=False)
+        ## Step 2.1. Wait for start
+        while self.goal_status != 1:
+            self.loop_rate.sleep()
+
+        ## Step 3. Update the parameters while the robot is moving
+        i = 0
+        while self.goal_status == 1:
+        #not all_close(pose_goal, move_group.get_current_pose().pose, 0.05):       # must be a better way to do this
+            ## Step 3.1. Get the current state
+            robot_state = self.last_state # get the last state
+            
+            ## Step 3.2. Do smthng
+            new_admittance, new_deflength = policy(robot_state)
+            #print("Admm: {}; Length: {}".format(new_admittance, new_deflength) )
+            
+            ## Step 3.3. Update the parameters
+            self.update_controller_parameters( 0.002, new_deflength )
+            self.loop_rate.sleep()
+            i+=1
+
+        print(i)
+        print("Stopping trajectory execution and parameter update")
+        # Calling `stop()` ensures that there is no residual movement
+        self.move_group.stop()
+        # It is always good to clear your targets after planning with poses.
+        self.move_group.clear_pose_targets()
+
+
+        
     def display_trajectory(self, plan):
         robot = self.robot
         display_trajectory_publisher = self.display_trajectory_publisher
@@ -271,13 +210,23 @@ class ShyControllerParameterInterface(object):
         # Publish
         display_trajectory_publisher.publish(display_trajectory)
 
+def demo_rule(robot_state):
+    force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
+    calc_admittance = max(0, (force-6)/1000) 
+    calc_deflength  = min(max(0.2, 5/force), 1)
+    #  20 -> 0.2
+    #   5 -> 1
+    #   5/f    
+    return calc_admittance, calc_deflength
+
+
 def main():
     try:
         print("----------------------------------------------------------")
         print("Press Ctrl-D to exit at any time")
         print("")
 
-        interface = ShyControllerParameterInterface(velocity_factor=0.01)
+        interface = ShyControllerParameterInterface(velocity_factor=0.05, update_rate=100)
         move_group = interface.move_group
 
         ## Step 1. Set a joint/pose/waypoint goal
@@ -290,44 +239,7 @@ def main():
         pose_goal.position.y = -0.03
         pose_goal.position.z =  0.63
 
-        move_group.set_pose_target(pose_goal)
-
-        # Waiting for callbacks
-        rospy.sleep(1)
-
-        ## Step 2. Execute the plan (non blocking)
-        success = move_group.go(wait=False)
-
-        ## Step 3. Update the parameters while the robot is moving
-        i = 0
-        while not all_close(pose_goal, move_group.get_current_pose().pose, 0.05):       # must be a better way to do this
-            ## Step 3.1. Get the current state
-            robot_state = interface.last_state # get the last state
-            
-            ## Step 3.2. Do smthng
-            force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
-            #print(robot_state.O_F_ext_hat_K[:3])
-            print("Force: ", force)
-            calc_admittance = max(0, (force-6)/1000) 
-            calc_deflength  = min(max(0.2, 5/force), 1)
-            #  20 -> 0.2
-            #   5 -> 1
-            #   5/f
-            print("Admm: {}; Length: {}".format(calc_admittance, calc_deflength) )
-            
-            ## Step 3.3. Update the parameters
-            interface.update_controller_parameters( 0.002, calc_deflength )
-            rospy.sleep(0.1)
-            i+=1
-
-        print(i)
-        print("Stopping trajectory execution and parameter update")
-        # Calling `stop()` ensures that there is no residual movement
-        move_group.stop()
-        # It is always good to clear your targets after planning with poses.
-        # Note: there is no equivalent function for clear_joint_value_targets().
-        move_group.clear_pose_targets()
-
+        interface.go(pose_goal, demo_rule)      
 
         print("============ demo complete!")
     except rospy.ROSInterruptException:
