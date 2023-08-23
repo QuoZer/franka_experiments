@@ -212,7 +212,7 @@ class ShyControllerParameterInterface(object):
 
 def demo_rule(robot_state):
     force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
-    calc_admittance = max(0, (force-6)/1000) 
+    calc_admittance = 0.06 #max(0, (force-6)/1000) 
     calc_deflength  = min(max(0.2, 5/force), 1)
     #  20 -> 0.2
     #   5 -> 1
@@ -226,7 +226,7 @@ def main():
         print("Press Ctrl-D to exit at any time")
         print("")
 
-        interface = ShyControllerParameterInterface(velocity_factor=0.05, update_rate=100)
+        interface = ShyControllerParameterInterface(velocity_factor=0.02, update_rate=100)
         move_group = interface.move_group
 
         ## Step 1. Set a joint/pose/waypoint goal
