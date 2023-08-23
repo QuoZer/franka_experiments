@@ -1,6 +1,9 @@
 # franka_experiments
 Repo for Aalto University summer internship on human-robot interaction. 
 
+## Dependencies
+Developed and tested on Ubuntu 20.04 with libfranka 0.10.0 and ROS Noetic. For moveit integration the panda_moveit_config package is required.
+
 ## Nodes
 - **shy_controller.cpp** - a controller based on the *"Trajectory Deformations from Physical Human-Robot Interaction"* paper. Takes joint trajectory messages as input and tries to follow them adapting to human interaction. Deformation visualization is available in *rviz*.
 - **cartesian_traject_controller.cpp** - a slightly modified default *cartesian_pose_controller*. Follows the interactive marker until the first position message is recieved from a separate topic. Then listens to the second topic only.
