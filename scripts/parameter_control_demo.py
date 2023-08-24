@@ -161,14 +161,17 @@ class ShyControllerParameterInterface(object):
 
         return
     
-    def go(self, pose_goal, policy):
-        self.move_group.set_pose_target(pose_goal)
+    def go(self, pose_goal, joint_goal, policy):
+        if pose_goal is not None:
+            self.move_group.set_pose_target(pose_goal)
+            self.move_group.go(wait=False)
+        else:
+            ## Step 2. Execute the plan (non blocking)
+            self.move_group.go(joint_goal, wait=False)
 
         # Waiting for callbacks
-        rospy.sleep(1)
+        #rospy.sleep(1)
 
-        ## Step 2. Execute the plan (non blocking)
-        success = self.move_group.go(wait=False)
         ## Step 2.1. Wait for start
         while self.goal_status != 1:
             self.loop_rate.sleep()
@@ -239,29 +242,29 @@ def main():
         home_goal.position.y = -0.03
         home_goal.position.z =  0.63
 
-        pose_start = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
-        pose_start.orientation.w = -0.00840
-        pose_start.orientation.x =  0.90669
-        pose_start.orientation.y = -0.42167
-        pose_start.orientation.z = -0.00536
-        pose_start.position.x =  0.32
-        pose_start.position.y =  0.48
-        pose_start.position.z = -0.00       
+        joint_goal1 = interface.move_group.get_current_joint_values()
+        joint_goal1[0] =  1.0158400713716094
+        joint_goal1[1] =  1.0113538222631915
+        joint_goal1[2] = -0.0151630544891221
+        joint_goal1[3] = -1.8440546987394
+        joint_goal1[4] =  0.0972106553316116
+        joint_goal1[5] =  2.8788972296832522 
+        joint_goal1[6] =  1.7203277126541385   
 
-        pose_end = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
-        pose_end.orientation.w = -0.00225
-        pose_end.orientation.x =  0.91926
-        pose_end.orientation.y = -0.39193
-        pose_end.orientation.z =  0.03662
-        pose_end.position.x =  0.34
-        pose_end.position.y = -0.40
-        pose_end.position.z =  0.03
+        joint_goal2 = interface.move_group.get_current_joint_values()
+        joint_goal2[0] =  -1.0535233611799424
+        joint_goal2[1] =  1.0087640687540957
+        joint_goal2[2] = 0.06635453703162114
+        joint_goal2[3] = -2.0256102815532326
+        joint_goal2[4] =  -0.29474617547017723
+        joint_goal2[5] =  2.992266217602624
+        joint_goal2[6] =  0.14004411141076148
 
-        interface.go(pose_start, demo_rule)      
+        interface.go(pose_goal=None, joint_goal=joint_goal1, policy=demo_rule)      
 
         rospy.sleep(5)
 
-        interface.go(pose_end, demo_rule)
+        interface.go(pose_goal=None, joint_goal=joint_goal2, policy=demo_rule)
 
         print("============ demo complete!")
     except rospy.ROSInterruptException:
