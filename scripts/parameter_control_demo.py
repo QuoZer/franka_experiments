@@ -122,6 +122,7 @@ class ShyControllerParameterInterface(object):
 
         # Parameters
         move_group.set_max_velocity_scaling_factor(velocity_factor)
+        move_group.set_planning_time(10)
 
         # Misc variables
         self.box_name = ""
@@ -227,19 +228,40 @@ def main():
         print("")
 
         interface = ShyControllerParameterInterface(velocity_factor=0.02, update_rate=100)
-        move_group = interface.move_group
 
         ## Step 1. Set a joint/pose/waypoint goal
-        pose_goal = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
-        pose_goal.orientation.w = -0.03505
-        pose_goal.orientation.x =  0.90729
-        pose_goal.orientation.y = -0.41821
-        pose_goal.orientation.z =  0.02635
-        pose_goal.position.x =  0.61
-        pose_goal.position.y = -0.03
-        pose_goal.position.z =  0.63
+        home_goal = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
+        home_goal.orientation.w = -0.03505
+        home_goal.orientation.x =  0.90729
+        home_goal.orientation.y = -0.41821
+        home_goal.orientation.z =  0.02635
+        home_goal.position.x =  0.61
+        home_goal.position.y = -0.03
+        home_goal.position.z =  0.63
 
-        interface.go(pose_goal, demo_rule)      
+        pose_start = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
+        pose_start.orientation.w = -0.00840
+        pose_start.orientation.x =  0.90669
+        pose_start.orientation.y = -0.42167
+        pose_start.orientation.z = -0.00536
+        pose_start.position.x =  0.32
+        pose_start.position.y =  0.48
+        pose_start.position.z = -0.00       
+
+        pose_end = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
+        pose_end.orientation.w = -0.00225
+        pose_end.orientation.x =  0.91926
+        pose_end.orientation.y = -0.39193
+        pose_end.orientation.z =  0.03662
+        pose_end.position.x =  0.34
+        pose_end.position.y = -0.40
+        pose_end.position.z =  0.03
+
+        interface.go(pose_start, demo_rule)      
+
+        rospy.sleep(5)
+
+        interface.go(pose_end, demo_rule)
 
         print("============ demo complete!")
     except rospy.ROSInterruptException:
