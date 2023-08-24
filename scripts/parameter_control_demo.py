@@ -184,7 +184,7 @@ class ShyControllerParameterInterface(object):
             #print("Admm: {}; Length: {}".format(new_admittance, new_deflength) )
             
             ## Step 3.3. Update the parameters
-            self.update_controller_parameters( 0.002, new_deflength )
+            self.update_controller_parameters( new_admittance, new_deflength )
             self.loop_rate.sleep()
             i+=1
 
@@ -212,7 +212,7 @@ class ShyControllerParameterInterface(object):
 
 def demo_rule(robot_state):
     force = np.linalg.norm( np.array(robot_state.O_F_ext_hat_K[:3]) )
-    calc_admittance = 0.06 #max(0, (force-6)/1000) 
+    calc_admittance = max(0, (force-6)/1000) 
     calc_deflength  = min(max(0.2, 5/force), 1)
     #  20 -> 0.2
     #   5 -> 1
