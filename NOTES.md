@@ -1,3 +1,9 @@
+"Human-robot collaborative framework for planning with corrective feedback" internship project notes.  
+Made by: Matvei Panteleev [matvei.panteleev@aalto.fi](mailto:matvei.panteleev@aalto.fi)     
+Supervised by: Shibei Zhu [shibei.zhu@aalto.fi](mailto:shibei.zhu@aalto.fi) | Tran Nguyen Le [tran.nguyenle@aalto.fi](mailto:tran.nguyenle@aalto.fi)    
+
+
+
 - [**State-of-the-art**](#state-of-the-art)
   - [First meeting references](#first-meeting-references)
     - [**AIC - A Novel Adaptive Controller for Robot Manipulators Based on Active Inference**](#aic---a-novel-adaptive-controller-for-robot-manipulators-based-on-active-inference)
@@ -12,7 +18,7 @@
   - [**Internship results**](#internship-results)
     - [**Contains:**](#contains)
     - [**Shy controller**](#shy-controller)
-    - [**Polymetis**](#polymetis)
+  - [**Polymetis**](#polymetis)
 
 
 # **State-of-the-art**
@@ -100,7 +106,7 @@ A review of the state-of-the-art methods of shared control for physical human-ro
 ## **Internship results**
 [Repo link](https://github.com/QuoZer/franka_experiments)
 
-Trajectory deformation technique implementation + some experiments.
+Trajectory deformation technique implementation + some experiments. More details in the repo's README.
 
 ### **Contains:**
 - A controller based on *"Trajectory Deformations from Physical Human-Robot Interaction"* paper - 'shy_controller'.  It accepts trajectories (e.g. from moviet interface) and tracks them with impedance control. External corrections are accepted with trajectory deformations. 
@@ -113,7 +119,7 @@ Trajectory deformation technique implementation + some experiments.
 ### **Shy controller**
 In general works like the default joint impedance controller - there is a high refresh rate (1kHz) update function that calculates and commands torques to the motors based on joint positions recorded in a trajectory. It has a lower refresh rate section that gets activated when every trajectory point is reached. This section reads external forces, calculates and updates trajectory deformations. 
 
-### **Polymetis**
+## **Polymetis**
 [Repo link](https://github.com/facebookresearch/fairo/tree/main/polymetis) | 
 [Docs](https://facebookresearch.github.io/fairo/polymetis/)
 
