@@ -8,8 +8,11 @@
     - [**Physical Interaction as Communication - Learning Robot Objectives Online from Human Corrections**](#physical-interaction-as-communication---learning-robot-objectives-online-from-human-corrections)
     - [**Trajectory Deformations from Physical Human-Robot Interaction**](#trajectory-deformations-from-physical-human-robot-interaction)
     - [**A Review of Intent Detection, Arbitration, and Communication Aspects of Shared Control for Physical Human–Robot Interaction**](#a-review-of-intent-detection-arbitration-and-communication-aspects-of-shared-control-for-physical-humanrobot-interaction)
-
-
+- [**Software**](#software)
+  - [**Internship results**](#internship-results)
+    - [**Contains:**](#contains)
+    - [**Shy controller**](#shy-controller)
+    - [**Polymetis**](#polymetis)
 
 
 # **State-of-the-art**
@@ -90,3 +93,34 @@ Implemented in My repo as ShyController.
 **Summary**
 
 A review of the state-of-the-art methods of shared control for physical human-robot interaction. The paper is focusing on three main sections: intent detection, arbitration, and communication. 
+
+
+# **Software**
+
+## **Internship results**
+[Repo link](https://github.com/QuoZer/franka_experiments)
+
+Trajectory deformation technique implementation + some experiments.
+
+### **Contains:**
+- A controller based on *"Trajectory Deformations from Physical Human-Robot Interaction"* paper - 'shy_controller'.  It accepts trajectories (e.g. from moviet interface) and tracks them with impedance control. External corrections are accepted with trajectory deformations. 
+- A script that demonstrates trajectory deformation on a 1 DoF trajectory example - *'traj_deform_demo.py'*.
+- A high-level script that uses python moveit interface to command shy_controller a trajectory and update deformation parameters based on the external force - *'parameter_control.py'*.
+- A controller based on the base *cartesian\_impendance\_controller* that switches to "trajectory" execution mode as soon as it starts receiving messages from a special node (below). 
+- A node that sends the robot to a start position and then executes a simple 1m straight line trajectory. It also detects when the external force get higher than a certain threshold to detect interactions with the robot. The trajectory goal is then moved forward in time by the time length of the interaction. 
+- Some Polymetis experiments (see readme)
+
+### **Shy controller**
+In general works like the default joint impedance controller - there is a high refresh rate (1kHz) update function that calculates and commands torques to the motors based on joint positions recorded in a trajectory. It has a lower refresh rate section that gets activated when every trajectory point is reached. This section reads external forces, calculates and updates trajectory deformations. 
+
+### **Polymetis**
+[Repo link](https://github.com/facebookresearch/fairo/tree/main/polymetis) | 
+[Docs](https://facebookresearch.github.io/fairo/polymetis/)
+
+A way to write controllers with PyTorch, test them in simulation, and transfer to real-time hardware developed by facebook research. In theory it could be a useful tool for researches working on manipulation policy learning as it allows to write controllers in python in the form of torch modules. In practice I found it less appealing for my work during the internship compared to franka_ros as ROS is more familiar and simply provides more tools for debugging and visualization. 
+
+Was used in  _"No, to the Right – Online Language Corrections for Robotic Manipulation via Shared Autonomy"_ paper. Code for reference: [sources](https://github.com/Stanford-ILIAD/lilac)
+
+Polymetis Tips
+- The first simulated example from the docs doesn't work. To run it, 'bullet_sim' needs to be replaced with e.g. 'franka_sim'. Still, the robot dynamics don't feel right. 
+- There are no example controllers in the distribution, so I added them inside the environment's _torchcontrol_ folder on my rt pc profile in the lab. 
