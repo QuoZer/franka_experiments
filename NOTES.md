@@ -15,7 +15,7 @@ Supervised by: Shibei Zhu [shibei.zhu@aalto.fi](mailto:shibei.zhu@aalto.fi) | Tr
     - [**Trajectory Deformations from Physical Human-Robot Interaction**](#trajectory-deformations-from-physical-human-robot-interaction)
     - [**A Review of Intent Detection, Arbitration, and Communication Aspects of Shared Control for Physical Human–Robot Interaction**](#a-review-of-intent-detection-arbitration-and-communication-aspects-of-shared-control-for-physical-humanrobot-interaction)
 - [**Software**](#software)
-  - [**Internship results**](#internship-results)
+  - [**Project files**](#project-files)
     - [**Contains:**](#contains)
     - [**Shy controller**](#shy-controller)
   - [**Polymetis**](#polymetis)
@@ -103,7 +103,7 @@ A review of the state-of-the-art methods of shared control for physical human-ro
 
 # **Software**
 
-## **Internship results**
+## **Project files**
 [Repo link](https://github.com/QuoZer/franka_experiments)
 
 Trajectory deformation technique implementation + some experiments. More details in the repo's README.
