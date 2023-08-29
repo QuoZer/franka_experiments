@@ -1,6 +1,6 @@
 "Human-robot collaborative framework for planning with corrective feedback" internship project notes.  
-Made by: Matvei Panteleev [matvei.panteleev@aalto.fi](mailto:matvei.panteleev@aalto.fi)     
-Supervised by: Shibei Zhu [shibei.zhu@aalto.fi](mailto:shibei.zhu@aalto.fi) | Tran Nguyen Le [tran.nguyenle@aalto.fi](mailto:tran.nguyenle@aalto.fi)    
+Made by: Matvei Panteleev ([matvei.panteleev@aalto.fi](mailto:matvei.panteleev@aalto.fi)  )   
+Supervised by: Shibei Zhu ([shibei.zhu@aalto.fi](mailto:shibei.zhu@aalto.fi)) | Tran Nguyen Le ([tran.nguyenle@aalto.fi](mailto:tran.nguyenle@aalto.fi))  
 
 
 
@@ -65,23 +65,19 @@ Method relies on pressure sensors around the wrist of a robot.
 
 
 ### **Learning Human Objectives from Sequences of Physical Corrections**
-[Paper link](https://arxiv.org/pdf/1907.03976.pdfhttps://vtechworks.lib.vt.edu/bitstream/handle/10919/108318/li_icra2021.pdf;jsessionid=5573746FD70F44F107B1012A3964DE28?sequence=2)
+[Paper link](https://arxiv.org/pdf/1907.03976.pdfhttps://vtechworks.lib.vt.edu/bitstream/handle/10919/108318/li_icra2021.pdf;jsessionid=5573746FD70F44F107B1012A3964DE28?sequence=2) | *No sources*
 
 **Summary**
 
 Human Corrections. The robot learns about the human’s reward — i.e., the true reward weights — from physical corrections. Intuitively, these corrections are applied forces and torques which push, twist, and guide the robots, deforming its trajectory. Considers all correction interconnected. 
 
-*No code*
-
 
 ### **Physical Interaction as Communication - Learning Robot Objectives Online from Human Corrections**
-[Paper link](https://vtechworks.lib.vt.edu/bitstream/handle/10919/108316/losey_ijrr2021.pdf?sequence=2)
+[Paper link](https://vtechworks.lib.vt.edu/bitstream/handle/10919/108316/losey_ijrr2021.pdf?sequence=2) | *No sources*
 
 **Summary**
 
 Within the proposed framework human interactions become observations about the true objective. They introduce approximations to learn from and respond to pHRI in real-time. Alters the trajectory according to correction with trajectory deformations and learns the new weights to replan a new trajectory closer to the human's objective. 
-
-*No code*
 
 
 ### **Trajectory Deformations from Physical Human-Robot Interaction**
