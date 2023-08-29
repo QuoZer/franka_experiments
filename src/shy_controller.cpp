@@ -1,5 +1,7 @@
-// Copyright (c) 2017 Franka Emika GmbH
-// Use of this source code is governed by the Apache-2.0 license, see LICENSE
+// Derived from Franka's joint trajectory controller. 
+// Based on "Trajectory Deformations from Physical Human-Robot Interaction" paper
+// Developed by: @QuoZer
+
 #include <franka_experiments/shy_controller.h>
 
 #include <cmath>
@@ -115,8 +117,8 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
 
   dynamic_server_compliance_param_ = std::make_unique<
       dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>(
-
       dynamic_reconfigure_compliance_param_node_);
+
   dynamic_server_compliance_param_->setCallback(
       boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
 
