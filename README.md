@@ -33,9 +33,8 @@ Notable parameters for **shy_controller** testing:
   - *maximum_waypoint_distance / minimum_waypoint_count* of OMPL - set to increase trajectory resolution (doesn't seem to affect cartesian trajectories). 
   - *velocity_scaling* of motion planning in rviz - set to more comfortable for experiments values. 
   - *impendance gains* of the robot - the softer the gains the easier it is to push the robot around and the higher is the external force noise.  
-  - External *force* and joint *torque* calm state values. The external force measurements are noisy and offset, so the controller might react to them even when the robot is not being pushed. These parameters remove the offset. 
 
 ## TODO
-- [ ] External force autocorrection
+- [ ] External force correction
 - [ ] Merge *shy_cartesian_controller* and rename *shy_controller* to *shy_joint_controller*.
 - [ ] k_gains / d_gains dynamic reconfigure
