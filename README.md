@@ -2,16 +2,19 @@
 Repo for Aalto University summer internship on human-robot interaction. 
 
 ## Dependencies
-Developed and tested on Ubuntu 20.04 with libfranka 0.10.0 and ROS Noetic. For moveit integration the panda_moveit_config package is required.
+Developed and tested on Ubuntu 20.04 with libfranka 0.10.0 and ROS Noetic. 
+- [libfranka & franka_ros](https://frankaemika.github.io/docs/installation_linux.html)
+- [Moveit 1](https://moveit.ros.org/install/)
+- [panda_moveit_config](https://github.com/ros-planning/panda_moveit_config.git) (for better perfoamance some config files need to be edited, see [Notes](#Notes) section)
 
 ## Nodes
 - **shy_controller.cpp** - a controller based on the *"Trajectory Deformations from Physical Human-Robot Interaction"* paper. Takes joint trajectory messages as input and tries to follow them adapting to human interaction. Deformation visualization is available in *rviz*.
+- **parameter_control.py** - a high-level script that uses python moveit interface to command *shy_controller* a trajectory and update parameters along the execution. 
 - **cartesian_traject_controller.cpp** - a slightly modified default *cartesian_pose_controller*. Follows the interactive marker until the first position message is recieved from a separate topic. Then listens to the second topic only.
 - **trajectory_pub.cpp** - a node that publishes trajectory points to *cartesian_traject_controller* and tries to detect human interactions based on F_ext. Record the time someone interacts with a robot and thne skips to a waypoint 'interaction time' forward.
-- **parameter_control.py** - a high-level script that uses python moveit interface to command *shy_controller* a trajectory and update parameters along the execution. 
 - **move_group_direct_trajectory.py** - plans and executes a cartesian trajectory using *moveit* This trajectory is recorded in *1m_backforth.bag*.
 - **traj_deform_demo.py** - demonstartes trajectory deformation on a 1 DoF trajectory example. 
-- **/polymetis/** - experiments with Polymetis framework. 
+- **/polymetis/** - experiments with [Polymetis](https://facebookresearch.github.io/fairo/polymetis/installation.html) framework. 
 
 ## Launchfiles
 - **gazebo_impendance_control.launch** - starts *certesian_trajectory_controller* in a simulated environment. Run trajectory_pub node to switch from interactive marker control to waypoint following. 
