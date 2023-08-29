@@ -307,6 +307,9 @@ void ShyController::getDeformedGoal(franka::RobotState& robot_state,
 
   // Nx7 = 1x1 * Nx1 * 1x7
   segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+  // Eigen::Matrix<double, 7,7> k_inv = k_gains_.inverse();
+  // could set actual admittance to reverse stiffness 
+  //segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose() * k_inv;
 
   int remaining_size = trajectory_deformation.rows() - slow_index;
   int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
