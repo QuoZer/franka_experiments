@@ -185,10 +185,13 @@ class ShyControllerParameterInterface(object):
             
             ## Step 3.2. Do smthng
             new_admittance, new_deflength = policy(robot_state)
-            #print("Admm: {}; Length: {}".format(new_admittance, new_deflength) )
+            
+            alpha = 0.99;
+            adm_filtered_ = (1 - alpha) * adm_filtered_ + alpha * new_admittance
+            len_filtered_ = (1 - alpha) * len_filtered_ + alpha * new_deflength
             
             ## Step 3.3. Update the parameters
-            self.update_controller_parameters( new_admittance, new_deflength )
+            self.update_controller_parameters( adm_filtered_, len_filtered_ )
             self.loop_rate.sleep()
             i+=1
 
