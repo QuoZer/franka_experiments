@@ -2,7 +2,7 @@
 Made by: Matvei Panteleev ([matvei.panteleev@aalto.fi](mailto:matvei.panteleev@aalto.fi)  )   
 Supervised by: Shibei Zhu ([shibei.zhu@aalto.fi](mailto:shibei.zhu@aalto.fi)) | Tran Nguyen Le ([tran.nguyenle@aalto.fi](mailto:tran.nguyenle@aalto.fi))  
 
-
+# **Table of Contents**
 
 - [**State-of-the-art**](#state-of-the-art)
   - [First meeting references](#first-meeting-references)
@@ -116,12 +116,12 @@ Trajectory deformation technique implementation + some experiments. More details
 In general works like the default joint impedance controller - there is a high refresh rate (1kHz) update function that calculates and commands torques to the motors based on joint positions recorded in a trajectory. It has a lower refresh rate section that gets activated when every trajectory point is reached. This section reads external forces, calculates and updates trajectory deformations. 
 
 ## **Polymetis**
-[Repo link](https://github.com/facebookresearch/fairo/tree/main/polymetis) | 
-[Docs](https://facebookresearch.github.io/fairo/polymetis/)
+[Repo link](https://github.com/facebookresearch/fairo/tree/main/polymetis) | [Docs](https://facebookresearch.github.io/fairo/polymetis/)
 
 A way to write controllers with PyTorch, test them in simulation, and transfer to real-time hardware developed by facebook research. In theory it could be a useful tool for researches working on manipulation policy learning as it allows to write controllers in python in the form of torch modules. In practice I found it less appealing for my work during the internship compared to franka_ros as ROS is more familiar and simply provides more tools for debugging and visualization. 
 
-Was used in  _"No, to the Right – Online Language Corrections for Robotic Manipulation via Shared Autonomy"_ paper. Code for reference: [sources](https://github.com/Stanford-ILIAD/lilac)
+Was used in  [_"No, to the Right – Online Language Corrections for Robotic Manipulation via Shared Autonomy"_](https://arxiv.org/pdf/2301.02555.pdf) paper. 
+Code for reference: [sources](https://github.com/Stanford-ILIAD/lilac)
 
 Polymetis Tips
 - The first simulated example from the docs doesn't work. To run it, 'bullet_sim' needs to be replaced with e.g. 'franka_sim'. Still, the robot dynamics don't feel right. 
