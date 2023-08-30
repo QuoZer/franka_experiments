@@ -122,6 +122,7 @@ class ShyControllerParameterInterface(object):
 
         # Parameters
         move_group.set_max_velocity_scaling_factor(velocity_factor)
+        move_group.set_planning_time(10)
 
         # Misc variables
         self.box_name = ""
@@ -160,14 +161,17 @@ class ShyControllerParameterInterface(object):
 
         return
     
-    def go(self, pose_goal, policy):
-        self.move_group.set_pose_target(pose_goal)
+    def go(self, pose_goal, joint_goal, policy):
+        if pose_goal is not None:
+            self.move_group.set_pose_target(pose_goal)
+            self.move_group.go(wait=False)
+        else:
+            ## Step 2. Execute the plan (non blocking)
+            self.move_group.go(joint_goal, wait=False)
 
         # Waiting for callbacks
-        rospy.sleep(1)
+        #rospy.sleep(1)
 
-        ## Step 2. Execute the plan (non blocking)
-        success = self.move_group.go(wait=False)
         ## Step 2.1. Wait for start
         while self.goal_status != 1:
             self.loop_rate.sleep()
@@ -181,10 +185,13 @@ class ShyControllerParameterInterface(object):
             
             ## Step 3.2. Do smthng
             new_admittance, new_deflength = policy(robot_state)
-            #print("Admm: {}; Length: {}".format(new_admittance, new_deflength) )
+            
+            alpha = 0.99;
+            adm_filtered_ = (1 - alpha) * adm_filtered_ + alpha * new_admittance
+            len_filtered_ = (1 - alpha) * len_filtered_ + alpha * new_deflength
             
             ## Step 3.3. Update the parameters
-            self.update_controller_parameters( 0.002, new_deflength )
+            self.update_controller_parameters( adm_filtered_, len_filtered_ )
             self.loop_rate.sleep()
             i+=1
 
@@ -226,20 +233,41 @@ def main():
         print("Press Ctrl-D to exit at any time")
         print("")
 
-        interface = ShyControllerParameterInterface(velocity_factor=0.05, update_rate=100)
-        move_group = interface.move_group
+        interface = ShyControllerParameterInterface(velocity_factor=0.02, update_rate=100)
 
         ## Step 1. Set a joint/pose/waypoint goal
-        pose_goal = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
-        pose_goal.orientation.w = -0.03505
-        pose_goal.orientation.x =  0.90729
-        pose_goal.orientation.y = -0.41821
-        pose_goal.orientation.z =  0.02635
-        pose_goal.position.x =  0.61
-        pose_goal.position.y = -0.03
-        pose_goal.position.z =  0.63
+        home_goal = geometry_msgs.msg.Pose()        # a bit ti the front of the home position
+        home_goal.orientation.w = -0.03505
+        home_goal.orientation.x =  0.90729
+        home_goal.orientation.y = -0.41821
+        home_goal.orientation.z =  0.02635
+        home_goal.position.x =  0.61
+        home_goal.position.y = -0.03
+        home_goal.position.z =  0.63
 
-        interface.go(pose_goal, demo_rule)      
+        joint_goal1 = interface.move_group.get_current_joint_values()
+        joint_goal1[0] =  1.0158400713716094
+        joint_goal1[1] =  1.0113538222631915
+        joint_goal1[2] = -0.0151630544891221
+        joint_goal1[3] = -1.8440546987394
+        joint_goal1[4] =  0.0972106553316116
+        joint_goal1[5] =  2.8788972296832522 
+        joint_goal1[6] =  1.7203277126541385   
+
+        joint_goal2 = interface.move_group.get_current_joint_values()
+        joint_goal2[0] =  -1.0535233611799424
+        joint_goal2[1] =  1.0087640687540957
+        joint_goal2[2] = 0.06635453703162114
+        joint_goal2[3] = -2.0256102815532326
+        joint_goal2[4] =  -0.29474617547017723
+        joint_goal2[5] =  2.992266217602624
+        joint_goal2[6] =  0.14004411141076148
+
+        interface.go(pose_goal=None, joint_goal=joint_goal1, policy=demo_rule)      
+
+        rospy.sleep(5)
+
+        interface.go(pose_goal=None, joint_goal=joint_goal2, policy=demo_rule)
 
         print("============ demo complete!")
     except rospy.ROSInterruptException:

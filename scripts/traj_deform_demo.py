@@ -87,7 +87,7 @@ def deform_trajectory(t, theta, step_signal, def_length, admittance, method=0):
     deformation_segment = np.zeros(N)
     tracked_theta = theta.copy()    
 
-    plt.plot(H, )
+    plt.plot(H, linewidth=3.0)
     plt.title('Deformation shape')
     plt.xlabel('Time (s)')
     plt.ylabel('Amplitude')
@@ -109,14 +109,18 @@ def deform_trajectory(t, theta, step_signal, def_length, admittance, method=0):
 
 if __name__ == '__main__':
     admittance = 2
-    deform_len = 50
+    deform_len = 40
     t, theta = traj_gen(0.01, 'sine', 1)
-    step_signal = human_force(t, -0.5, 1, 0.6)
+    step_signal = human_force(t, -0.3, 1, 0.6)
     deformed_theta = deform_trajectory(t, theta, step_signal, deform_len, admittance, method=1)
+    deformed_theta2 = deform_trajectory(t, theta, step_signal, deform_len+60, admittance, method=1)
     
     # Plot the trajectory
     plt.figure()
-    plt.plot(t, theta)
+    # change plt line thickness
+
+
+    plt.plot(t, theta, linewidth=3.0, linestyle='--')
     plt.title('Robot Joint Trajectory')
     plt.xlabel('Time (s)')
     plt.ylabel('Position (rad)')
@@ -124,7 +128,7 @@ if __name__ == '__main__':
     # plt.show()
     # Plot
     #plt.figure()
-    plt.plot(t, step_signal)
+    plt.plot(t, step_signal, linewidth=3.0)
     plt.title('Step Signal')
     plt.xlabel('Time (s)')
     plt.ylabel('Amplitude')
@@ -132,9 +136,13 @@ if __name__ == '__main__':
     # plt.show()
     # Plot the deformed trajectory
     # plt.figure()
-    plt.plot(t, deformed_theta)
+    plt.plot(t, deformed_theta, linewidth=3.0)
+    plt.plot(t, deformed_theta2, linewidth=3.0)
     plt.title('Deformed Robot Joint Trajectory')
     plt.xlabel('Time (s)')
     plt.ylabel('Position (rad)')
     plt.grid(True)
+
+
+    plt.legend(['Original', 'Applied force', 'Deformed, N=40', 'Deformed, N=100'])
     plt.show()

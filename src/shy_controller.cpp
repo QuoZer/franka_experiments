@@ -1,5 +1,7 @@
-// Copyright (c) 2017 Franka Emika GmbH
-// Use of this source code is governed by the Apache-2.0 license, see LICENSE
+// Derived from Franka's joint trajectory controller. 
+// Based on "Trajectory Deformations from Physical Human-Robot Interaction" paper
+// Developed by: @QuoZer
+
 #include <franka_experiments/shy_controller.h>
 
 #include <cmath>
@@ -115,8 +117,8 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
 
   dynamic_server_compliance_param_ = std::make_unique<
       dynamic_reconfigure::Server<franka_experiments::compliance_paramConfig>>(
-
       dynamic_reconfigure_compliance_param_node_);
+
   dynamic_server_compliance_param_->setCallback(
       boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
 
@@ -305,6 +307,9 @@ void ShyController::getDeformedGoal(franka::RobotState& robot_state,
 
   // Nx7 = 1x1 * Nx1 * 1x7
   segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose();
+  // Eigen::Matrix<double, 7,7> k_inv = k_gains_.inverse();
+  // could set actual admittance to reverse stiffness 
+  //segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * uh.transpose() * k_inv;
 
   int remaining_size = trajectory_deformation.rows() - slow_index;
   int short_vector_effective_size = std::min((int)segment_deformation.rows(), remaining_size);
