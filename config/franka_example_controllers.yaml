@@ -14,7 +14,7 @@ shy_cartesian_controller:
     force_non_sensitivity_threshold: [-4, 2, 2, 1, 0.8, -0.2]
 
 shy_controller:
-    type: franka_example_controllers/ShyController
+    type: franka_example_controllers/ShyJointController
     arm_id: $(arg arm_id)
     joint_names:
         - $(arg arm_id)_joint1

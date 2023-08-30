@@ -171,7 +171,7 @@ add_dependencies(trajectory_pub_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catki
 ## Declare a C++ library
 add_library(franka_experiments
   src/cartesian_traject_controller.cpp
-  src/shy_controller.cpp
+  src/shy_joint_controller.cpp
   src/shy_cartesian_controller.cpp
 )
 

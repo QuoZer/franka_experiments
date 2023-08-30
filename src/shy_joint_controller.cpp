@@ -2,7 +2,7 @@
 // Based on "Trajectory Deformations from Physical Human-Robot Interaction" paper
 // Developed by: @QuoZer
 
-#include <franka_experiments/shy_controller.h>
+#include <franka_experiments/shy_joint_controller.h>
 
 #include <cmath>
 #include <memory>
@@ -17,38 +17,38 @@
 
 namespace franka_example_controllers {
 
-bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
+bool  ShyJointController::init(hardware_interface::RobotHW* robot_hw,
                                       ros::NodeHandle& node_handle) {
   // save nh
   controller_nh_ = node_handle;
 
   std::string arm_id;
   if (!node_handle.getParam("arm_id", arm_id)) {
-    ROS_ERROR_STREAM(" ShyController: Could not read parameter arm_id");
+    ROS_ERROR_STREAM(" ShyJointController: Could not read parameter arm_id");
     return false;
   }
   std::vector<std::string> joint_names;
   if (!node_handle.getParam("joint_names", joint_names) || joint_names.size() != 7) {
     ROS_ERROR(
-        " ShyController: Invalid or no joint_names parameters provided, "
+        " ShyJointController: Invalid or no joint_names parameters provided, "
         "aborting controller init!");
     return false;
   }
 
   if (!node_handle.getParam("trajectory_deformed_length", deformed_segment_length)) {
-    ROS_ERROR_STREAM(" ShyController: Could not read parameter trajectory_deformed_length");
+    ROS_ERROR_STREAM(" ShyJointController: Could not read parameter trajectory_deformed_length");
     return false;
   }
   
   if (!node_handle.getParam("admittance", admittance)) {
-    ROS_ERROR_STREAM(" ShyController: Could not read parameter admittance");
+    ROS_ERROR_STREAM(" ShyJointController: Could not read parameter admittance");
     return false;
   }
 
   std::vector<double> k_gains_vec;
   if (!node_handle.getParam("k_gains", k_gains_vec) || k_gains_vec.size() != 7) {
     ROS_ERROR(
-        "ShyController:  Invalid or no k_gain parameters provided, aborting "
+        "ShyJointController:  Invalid or no k_gain parameters provided, aborting "
         "controller init!");
     return false;
   }
@@ -57,7 +57,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   std::vector<double> d_gains_vec;
   if (!node_handle.getParam("d_gains", d_gains_vec) || d_gains_vec.size() != 7) {
     ROS_ERROR(
-        "ShyController:  Invalid or no d_gain parameters provided, aborting "
+        "ShyJointController:  Invalid or no d_gain parameters provided, aborting "
         "controller init!");
     return false;
   }  
@@ -66,7 +66,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   auto* model_interface = robot_hw->get<franka_hw::FrankaModelInterface>();
   if (model_interface == nullptr) {
     ROS_ERROR_STREAM(
-        " ShyController: Error getting model interface from hardware");
+        " ShyJointController: Error getting model interface from hardware");
     return false;
   }
   try {
@@ -74,7 +74,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
         model_interface->getHandle(arm_id + "_model"));
   } catch (hardware_interface::HardwareInterfaceException& ex) {
     ROS_ERROR_STREAM(
-        " ShyController: Exception getting model handle from interface: "
+        " ShyJointController: Exception getting model handle from interface: "
         << ex.what());
     return false;
   }
@@ -82,7 +82,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   auto* state_interface = robot_hw->get<franka_hw::FrankaStateInterface>();
   if (state_interface == nullptr) {
     ROS_ERROR_STREAM(
-        " ShyController: Error getting state interface from hardware");
+        " ShyJointController: Error getting state interface from hardware");
     return false;
   }
   try {
@@ -90,7 +90,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
         state_interface->getHandle(arm_id + "_robot"));
   } catch (hardware_interface::HardwareInterfaceException& ex) {
     ROS_ERROR_STREAM(
-        " ShyController: Exception getting state handle from interface: "
+        " ShyJointController: Exception getting state handle from interface: "
         << ex.what());
     return false;
   }
@@ -98,7 +98,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   auto* effort_joint_interface = robot_hw->get<hardware_interface::EffortJointInterface>();
   if (effort_joint_interface == nullptr) {
     ROS_ERROR_STREAM(
-        " ShyController: Error getting effort joint interface from hardware");
+        " ShyJointController: Error getting effort joint interface from hardware");
     return false;
   }
   for (size_t i = 0; i < 7; ++i) {
@@ -106,7 +106,7 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
       joint_handles_.push_back(effort_joint_interface->getHandle(joint_names[i]));
     } catch (const hardware_interface::HardwareInterfaceException& ex) {
       ROS_ERROR_STREAM(
-          " ShyController: Exception getting joint handles: " << ex.what());
+          " ShyJointController: Exception getting joint handles: " << ex.what());
       return false;
     }
   }
@@ -120,12 +120,12 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
       dynamic_reconfigure_compliance_param_node_);
 
   dynamic_server_compliance_param_->setCallback(
-      boost::bind(& ShyController::complianceParamCallback, this, _1, _2));
+      boost::bind(& ShyJointController::complianceParamCallback, this, _1, _2));
 
   // ROS API: Subscribed topics
-  //trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyController::trajectoryCallback, this);
+  //trajectory_command_sub_ = node_handle.subscribe("command", 1, &ShyJointController::trajectoryCallback, this);
   sub_trajectory_ = node_handle.subscribe(
-      "move_group/display_planned_path", 20, & ShyController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
+      "move_group/display_planned_path", 20, & ShyJointController::trajectoryCallback, this,   // TODO: change topic name instead of remapping
       ros::TransportHints().reliable().tcpNoDelay());
 
   // ROS API: Published topics
@@ -134,14 +134,14 @@ bool  ShyController::init(hardware_interface::RobotHW* robot_hw,
   // ROS API: Action interface
   action_server_.reset(
       new ActionServer(node_handle, "follow_joint_trajectory",
-                       std::bind(&ShyController::goalCB, this, std::placeholders::_1),
-                       std::bind(&ShyController::cancelCB, this, std::placeholders::_1), false));
+                       std::bind(&ShyJointController::goalCB, this, std::placeholders::_1),
+                       std::bind(&ShyJointController::cancelCB, this, std::placeholders::_1), false));
   action_server_->start();
 
   return true;
 }
 
-void  ShyController::starting(const ros::Time& /*time*/) {
+void  ShyJointController::starting(const ros::Time& /*time*/) {
   franka::RobotState initial_state = state_handle_->getRobotState();
   
   // get jacobian
@@ -163,10 +163,10 @@ void  ShyController::starting(const ros::Time& /*time*/) {
   deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
   precompute(deformed_segment_length);
 
-  ROS_INFO("ShyController: Starting controller");
+  ROS_INFO("ShyJointController: Starting controller");
 }
 
-void ShyController::precompute(int N)
+void ShyJointController::precompute(int N)
 {
   // Deformations precompute
   unit = Eigen::MatrixXd::Ones(N, 1);
@@ -199,10 +199,10 @@ void ShyController::precompute(int N)
   H_full = std::sqrt(N) * G / G.norm();  
   H = H_full;  
 
-  ROS_INFO("ShyController: Finished precompute");
+  ROS_INFO("ShyJointController: Finished precompute");
 }
 
-void  ShyController::update(const ros::Time& time,
+void  ShyJointController::update(const ros::Time& time,
                             const ros::Duration& period) {
   // Update time data (this block is taken from the OG joint traj conroller)
   prev_time_data_ = *(time_data_.readFromRT());
@@ -290,19 +290,19 @@ void  ShyController::update(const ros::Time& time,
 
 }  // end update()
 
-void ShyController::stopping(const ros::Time& /*time*/)
+void ShyJointController::stopping(const ros::Time& /*time*/)
 {
   preemptActiveGoal();
 }
 
-void ShyController::getDeformedGoal(franka::RobotState& robot_state,  
+void ShyJointController::getDeformedGoal(franka::RobotState& robot_state,  
                                     Eigen::Matrix<double, 7, 1>& q_d, 
                                     Eigen::Matrix<double, 7, 1>& dq_d)
 {
   Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
   if (segment_deformation.rows() !=  H.rows() ) {
-    ROS_ERROR("ShyController: segment_deformation.rows() !=  H.rows()");
+    ROS_ERROR("ShyJointController: segment_deformation.rows() !=  H.rows()");
   }
 
   // Nx7 = 1x1 * Nx1 * 1x7
@@ -325,7 +325,7 @@ void ShyController::getDeformedGoal(franka::RobotState& robot_state,
     dq_d = delta_q * pow(10, 9) / trajectory_sample_time;   //nsec to sec
 }
 
-void ShyController::setActionFeedback(const TimeData& time_data, 
+void ShyJointController::setActionFeedback(const TimeData& time_data, 
                                       const franka::RobotState& robot_state, 
                                       Eigen::Matrix<double, 7, 1> q_d, 
                                       Eigen::Matrix<double, 7, 1> dq_d)
@@ -353,7 +353,7 @@ void ShyController::setActionFeedback(const TimeData& time_data,
 
 }
 
-Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
+Eigen::Matrix<double, 7, 1>  ShyJointController::saturateTorqueRate(
     const Eigen::Matrix<double, 7, 1>& tau_d_calculated,
     const Eigen::Matrix<double, 7, 1>& tau_J_d) 
 {  
@@ -368,7 +368,7 @@ Eigen::Matrix<double, 7, 1>  ShyController::saturateTorqueRate(
 
 // Callback functions below 
 
-void  ShyController::complianceParamCallback(
+void  ShyJointController::complianceParamCallback(
     franka_experiments::compliance_paramConfig& config,
     uint32_t /*level*/) {
   std::lock_guard<std::mutex> lock(admittance_mutex_);
@@ -376,7 +376,7 @@ void  ShyController::complianceParamCallback(
   deformed_segment_ratio_target_ = config.deformed_length;
 }
 
-void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj)
+void ShyJointController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj)
 {
   num_of_joints = traj.joint_names.size();
   trajectory_length = traj.points.size();
@@ -407,7 +407,7 @@ void ShyController::parseTrajectory(const trajectory_msgs::JointTrajectory& traj
                  trajectory_length, deformed_segment_length, admittance);
 }
 
-void ShyController::downsampleDeformation(int new_N)
+void ShyJointController::downsampleDeformation(int new_N)
 {
   // To have at least some points 
   new_N = static_cast<int>(std::max(10, new_N)); 
@@ -428,7 +428,7 @@ void ShyController::downsampleDeformation(int new_N)
 
 }
 
-void  ShyController::trajectoryCallback(
+void  ShyJointController::trajectoryCallback(
     const moveit_msgs::DisplayTrajectory::ConstPtr& msg) {
 
   if (have_trajectory){
@@ -446,7 +446,7 @@ void  ShyController::trajectoryCallback(
   preemptActiveGoal();
 } 
 
-void ShyController::goalCB(GoalHandle gh)
+void ShyJointController::goalCB(GoalHandle gh)
 {
   // Preconditions:
   if (robot_mode == franka::RobotMode::kUserStopped || robot_mode == franka::RobotMode::kReflex)
@@ -496,7 +496,7 @@ void ShyController::goalCB(GoalHandle gh)
   goal_handle_timer_.start();
 }
 
-void ShyController::cancelCB(GoalHandle gh)
+void ShyJointController::cancelCB(GoalHandle gh)
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
 
@@ -513,7 +513,7 @@ void ShyController::cancelCB(GoalHandle gh)
   }
 }
 
-inline void ShyController::preemptActiveGoal()
+inline void ShyJointController::preemptActiveGoal()
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
 
@@ -525,7 +525,7 @@ inline void ShyController::preemptActiveGoal()
   }
 }
 
-void ShyController::successActiveGoal()
+void ShyJointController::successActiveGoal()
 {
   RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
   ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
@@ -543,7 +543,7 @@ void ShyController::successActiveGoal()
 
 // Visualization related things below 
 
-void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
+void ShyJointController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
 {
   if (marker_publisher_ && marker_publisher_->trylock())
   {
@@ -602,7 +602,7 @@ void ShyController::publishTrajectoryMarkers(Eigen::MatrixXd& trajectory)
   }
 }
 
-void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency)
+void ShyJointController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int frequency)
 {
   visualization_msgs::MarkerArray markers;
   visualization_msgs::Marker marker;
@@ -632,7 +632,7 @@ void ShyController::fillFullTrajectoryMarkers(Eigen::MatrixXd& trajectory, int f
   full_trajectory_markers_ = markers;
 }
 
-Eigen::Matrix<double, 8, 4> ShyController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
+Eigen::Matrix<double, 8, 4> ShyJointController::dh_params(const Eigen::Matrix<double, 7, 1>& joint_variable) 
 {
   // Create DH parameters (data given by maker franka-emika)
   dh <<   0,      0,        0.333,   joint_variable(0, 0),
@@ -647,7 +647,7 @@ Eigen::Matrix<double, 8, 4> ShyController::dh_params(const Eigen::Matrix<double,
   return dh;
 }
 
-Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 8, 4>& dh) 
+Eigen::Matrix4d ShyJointController::TF_matrix(int i, const Eigen::Matrix<double, 8, 4>& dh) 
 {
   double alpha = dh(i, 0);
   double a = dh(i, 1);
@@ -662,7 +662,7 @@ Eigen::Matrix4d ShyController::TF_matrix(int i, const Eigen::Matrix<double, 8, 4
   return TF;
 }
 
-void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation)
+void ShyJointController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_pose, Eigen::Vector3d& translation)
 {
   Eigen::Matrix<double, 8, 4> dh_parameters = dh_params(joint_pose);
 
@@ -683,5 +683,5 @@ void ShyController::forwardKinematics(const Eigen::Matrix<double, 7, 1>& joint_p
 
 }  // namespace franka_example_controllers
 
-PLUGINLIB_EXPORT_CLASS(franka_example_controllers::ShyController,   //
+PLUGINLIB_EXPORT_CLASS(franka_example_controllers::ShyJointController,   //
                        controller_interface::ControllerBase)

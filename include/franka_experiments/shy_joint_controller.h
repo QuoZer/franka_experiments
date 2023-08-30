@@ -41,7 +41,7 @@
 
 namespace franka_example_controllers {
 
-class  ShyController : public controller_interface::MultiInterfaceController<
+class  ShyJointController : public controller_interface::MultiInterfaceController<
                                                 franka_hw::FrankaModelInterface,
                                                 hardware_interface::EffortJointInterface,
                                                 franka_hw::FrankaStateInterface> {
