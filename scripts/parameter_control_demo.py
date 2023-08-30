@@ -96,7 +96,7 @@ class ShyControllerParameterInterface(object):
             queue_size=20,
         )
 
-        self.parameter_updater = dynamic_reconfigure.client.Client("/shy_controller/dynamic_reconfigure_compliance_param_node",
+        self.parameter_updater = dynamic_reconfigure.client.Client("/shy_joint_controller/dynamic_reconfigure_compliance_param_node",
                                                               timeout=30,
                                                               config_callback=None)
 
@@ -104,7 +104,7 @@ class ShyControllerParameterInterface(object):
                                                    franka.FrankaState, 
                                                    self.state_callback)
         # get the goal updates from the controller. Doesn't seem very reliable - update rate is around 5 Hz
-        self.goal_state_subscriber = rospy.Subscriber("shy_controller/follow_joint_trajectory/status",
+        self.goal_state_subscriber = rospy.Subscriber("shy_joint_controller/follow_joint_trajectory/status",
                                                      GoalStatusArray, 
                                                      self.goal_callback)
 
@@ -169,6 +169,8 @@ class ShyControllerParameterInterface(object):
             ## Step 2. Execute the plan (non blocking)
             self.move_group.go(joint_goal, wait=False)
 
+        len_filtered_ = 0
+        adm_filtered_ = 0
         # Waiting for callbacks
         #rospy.sleep(1)
 
