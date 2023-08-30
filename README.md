@@ -39,5 +39,4 @@ Notable parameters for **shy_controller** testing:
 
 ## TODO
 - [ ] External force correction
-- [ ] Merge *shy_cartesian_controller* and rename *shy_controller* to *shy_joint_controller*.
 - [ ] k_gains / d_gains dynamic reconfigure
