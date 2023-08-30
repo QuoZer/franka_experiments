@@ -101,14 +101,14 @@ bool  ShyCartesianController::init(hardware_interface::RobotHW* robot_hw,
     }
   }
 
-  std::vector<double> force_thresholds;
-  if (!node_handle.getParam("force_non_sensitivity_threshold", force_thresholds)) {
-    ROS_ERROR(
-        "ShyController:  Invalid or no k_gain parameters provided, aborting "
-        "controller init!");
-    return false;
-  }
-  force_thresholds_vector = Eigen::Matrix<double, 6, 1>(force_thresholds.data());
+  // std::vector<double> force_thresholds;
+  // if (!node_handle.getParam("force_non_sensitivity_threshold", force_thresholds)) {
+  //   ROS_ERROR(
+  //       "ShyController:  Invalid or no force_thresholds provided, aborting "
+  //       "controller init!");
+  //   return false;
+  // }
+  // force_thresholds_vector = Eigen::Matrix<double, 6, 1>(force_thresholds.data());
 
   dynamic_reconfigure_compliance_param_node_ =
       ros::NodeHandle(node_handle.getNamespace() + "/dynamic_reconfigure_compliance_param_node");
@@ -256,15 +256,14 @@ void  ShyCartesianController::update(const ros::Time& time,
     slow_index++;
     fast_index = 0;
     Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
-    //Eigen::Map<Eigen::Matrix<double, 7, 1>> uh(robot_state.tau_ext_hat_filtered.data());
 
     if (pos_segment_deformation.rows() !=  H.rows() ) {
       ROS_ERROR("ShyCartesianController: segment_deformation.rows() !=  H.rows()");
     }
     // Subtracting the force threshold from the measured force to correct for the calm state force
-    fh -= force_thresholds_vector;
+    //fh -= force_thresholds_vector;
     // Filtering the noise from the force measurement
-    fh = ((fh.array() > -0.1) && (fh.array() < 0.1)).select(0, fh);
+    //fh = ((fh.array() > -0.1) && (fh.array() < 0.1)).select(0, fh);
 
     //  Nx3 = 1x1 * Nx1 * 1x3   (deforming only position for now)
     pos_segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * fh.block(0, 0, 3, 1).transpose();
