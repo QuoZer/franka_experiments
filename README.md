@@ -54,5 +54,5 @@ Notable parameters for **shy_controller** testing:
 
 ## TODO
 - [ ] External force correction
-- [ ] Adapt parameter control to the cartesian controller
+- [ ] Adapt parameter control to the cartesian controller (topics are hardcoded now)
 - [ ] k_gains / d_gains dynamic reconfigure
