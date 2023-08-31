@@ -1,5 +1,5 @@
-cartesian_traject_controller:
-    type: franka_example_controllers/CartesianTrajectoryController
+shy_cartesian_controller:
+    type: franka_example_controllers/ShyCartesianController
     arm_id: $(arg arm_id)
     joint_names:
         - $(arg arm_id)_joint1
@@ -8,10 +8,12 @@ cartesian_traject_controller:
         - $(arg arm_id)_joint4
         - $(arg arm_id)_joint5
         - $(arg arm_id)_joint6
-        - $(arg arm_id)_joint7        
+        - $(arg arm_id)_joint7
+    trajectory_deformed_length: 10
+    admittance: 0.002
 
-shy_controller:
-    type: franka_example_controllers/ShyController
+shy_joint_controller:
+    type: franka_example_controllers/ShyJointController
     arm_id: $(arg arm_id)
     joint_names:
         - $(arg arm_id)_joint1
@@ -39,4 +41,17 @@ shy_controller:
         - 7.0
     coriolis_factor: 1.0
     trajectory_deformed_length: 10
+    admittance: 0.001    
+
+cartesian_traject_controller:
+    type: franka_example_controllers/CartesianTrajectoryController
+    arm_id: $(arg arm_id)
+    joint_names:
+        - $(arg arm_id)_joint1
+        - $(arg arm_id)_joint2
+        - $(arg arm_id)_joint3
+        - $(arg arm_id)_joint4
+        - $(arg arm_id)_joint5
+        - $(arg arm_id)_joint6
+        - $(arg arm_id)_joint7        
     admittance: 0.001

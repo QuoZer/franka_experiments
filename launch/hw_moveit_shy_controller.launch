@@ -5,22 +5,20 @@
   <arg name="rate" default="60"/>
   <arg name="publish_rate" default="60"/>
   <arg name="load_gripper" />
+  <!-- Name of the controller: shy_joint_controller, shy_cartesian_controller  -->
+  <arg name="controller" default="shy_cartesian_controller" /> 
 
   <!-- Launch real-robot control -->
   <include file="$(find franka_control)/launch/franka_control.launch" pass_all_args="true" />
 
-  <!-- By default use joint position controllers -->
-  <!-- <arg name="transmission" default="" /> -->
-  <arg name="controller" default="shy_controller" />
   <!-- Start ROS controllers -->
     <!-- Load joint controller configurations from YAML file to parameter server -->
+  <include file="$(find panda_moveit_config)/launch/panda_moveit_controller_manager.launch.xml" />
   <rosparam file="$(find panda_moveit_config)/config/ros_controllers.yaml" command="load"  subst_value="true"/>
   <rosparam file="$(find franka_experiments)/config/hw_controllers.yaml"   command="load"  subst_value="true"/>
-
-  <include file="$(find panda_moveit_config)/launch/panda_moveit_controller_manager.launch.xml" />
-
   <rosparam command="load" file="$(find franka_experiments)/config/franka_example_controllers.yaml" subst_value="true" />
-  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="shy_controller"/>
+
+  <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="$(arg controller)"/>
   
   <!-- as well as MoveIt demo -->
   <include file="$(find panda_moveit_config)/launch/demo.launch" pass_all_args="true">
