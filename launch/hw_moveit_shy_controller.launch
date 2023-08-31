@@ -5,7 +5,7 @@
   <arg name="rate" default="60"/>
   <arg name="publish_rate" default="60"/>
   <arg name="load_gripper" />
-  <!-- Name of the controller: shy_controller, shy_cartesian_controller  -->
+  <!-- Name of the controller: shy_joint_controller, shy_cartesian_controller  -->
   <arg name="controller" default="shy_cartesian_controller" /> 
 
   <!-- Launch real-robot control -->
