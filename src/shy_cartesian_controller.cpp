@@ -218,9 +218,8 @@ void  ShyCartesianController::update(const ros::Time& time,
 
   // get state variables
   franka::RobotState robot_state = state_handle_->getRobotState();
-  std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
-  std::array<double, 42> jacobian_array =
-      model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
+  // convert to Eigen
+  robot_mode = robot_state.robot_mode; 
 
   // franka RobotState can be used instead, but to keep thing uniformal in feedback pub...
   State desired_state;  
@@ -228,17 +227,6 @@ void  ShyCartesianController::update(const ros::Time& time,
   current_state.position = std::vector<double>(robot_state.q.data(), robot_state.q.data() + robot_state.q.size());
   current_state.velocity = std::vector<double>(robot_state.dq.data(), robot_state.dq.data() + robot_state.dq.size());
   current_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-
-  // convert to Eigen
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
-  Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
-  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());
-  Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
-  Eigen::Vector3d position(transform.translation());
-  Eigen::Quaterniond orientation(transform.rotation());
-  robot_mode = robot_state.robot_mode; 
 
   // update parameters changed online through dynamic reconfigure 
   std::lock_guard<std::mutex> lock(admittance_mutex_);
@@ -255,63 +243,87 @@ void  ShyCartesianController::update(const ros::Time& time,
   {
     slow_index++;
     fast_index = 0;
-    Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
 
     if (pos_segment_deformation.rows() !=  H.rows() ) {
       ROS_ERROR("ShyCartesianController: segment_deformation.rows() !=  H.rows()");
     }
-    // Subtracting the force threshold from the measured force to correct for the calm state force
-    //fh -= force_thresholds_vector;
-    // Filtering the noise from the force measurement
-    //fh = ((fh.array() > -0.1) && (fh.array() < 0.1)).select(0, fh);
 
-    //  Nx3 = 1x1 * Nx1 * 1x3   (deforming only position for now)
-    pos_segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * fh.block(0, 0, 3, 1).transpose();
-
-    int remaining_size = trajectory_deformation.rows() - slow_index;
-    int short_vector_effective_size = std::min((int)pos_segment_deformation.rows(), remaining_size);
-    // Additions to the map object are reflected in the original matrix
-    trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 3) += pos_segment_deformation.topRows(short_vector_effective_size);
-    
-    // Update targets
-    position_d_ = trajectory_deformation.row(slow_index) + trajectory_positions.row(slow_index);
-    orientation_d_ = Eigen::Quaterniond(trajectory_orientations(slow_index, 3),
-                                        trajectory_orientations(slow_index, 0), 
-                                        trajectory_orientations(slow_index, 1), 
-                                        trajectory_orientations(slow_index, 2));
-      //trajectory_orientations.row(slow_index).data());  // xyzw
+    getDeformedGoal(robot_state, position_d_, orientation_d_);
 
     // termination, resetting goal
-    RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
     if (slow_index == trajectory_length - 1)
     {
-      ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
-      slow_index = 0;
-      have_trajectory = false;
-      if (current_active_goal) {
-        current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
-        current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
-        current_active_goal->runNonRealtime(ros::TimerEvent());                              // now it works. doesn't look realtime-safe though
-        current_active_goal.reset(); 
-        rt_active_goal_.reset();
-      }
+      successActiveGoal();
     }
-
-    // desired_state.position = std::vector<double>(q_d.data(), q_d.data() + q_d.size());
-    // desired_state.velocity = std::vector<double>(dq_d.data(), dq_d.data() + dq_d.size());
-    // desired_state.time_from_start = ros::Duration(time_data.uptime.toSec(), time_data.uptime.toNSec());
-    // setActionFeedback(desired_state, current_state);
+    // TODO: fix and return feedback publishing
 
     publishTrajectoryMarkers(trajectory_positions, 1);
   } // end traj deform
   else if (need_recompute)  // updating deformation matrix only in timesteps when no deformation takes place
   {
     deformed_segment_length = static_cast<int>(std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio)))); 
-    // testing with regular recompute
     downsampleDeformation(deformed_segment_length);
     need_recompute = false;
   }
 
+  Eigen::VectorXd tau_d(7);
+  computeTau(robot_state, tau_d);
+
+  // sending tau to the robot
+  for (size_t i = 0; i < 7; ++i) {
+    joint_handles_[i].setCommand(tau_d(i));
+  }
+
+  cartesian_stiffness_ =
+      filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
+  cartesian_damping_ =
+      filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
+  nullspace_stiffness_ =
+      filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
+  // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
+}  // end update()
+
+void ShyCartesianController::getDeformedGoal(franka::RobotState& robot_state,  
+                       Eigen::Vector3d& position_d_, 
+                       Eigen::Quaterniond& orientation_d_)
+{
+  Eigen::Map<Eigen::Matrix<double, 6, 1>> fh(robot_state.K_F_ext_hat_K.data());
+  // Subtracting the force threshold from the measured force to correct for the calm state force
+  //fh -= force_thresholds_vector;
+  // Filtering the noise from the force measurement
+  //fh = ((fh.array() > -0.1) && (fh.array() < 0.1)).select(0, fh);
+
+  //  Nx3 = 1x1 * Nx1 * 1x3   (deforming only position for now)
+  pos_segment_deformation = admittance * trajectory_sample_time/pow(10, 9) * H * fh.block(0, 0, 3, 1).transpose();
+
+  int remaining_size = trajectory_deformation.rows() - slow_index;
+  int short_vector_effective_size = std::min((int)pos_segment_deformation.rows(), remaining_size);
+  // Additions to the map object are reflected in the original matrix
+  trajectory_deformation.block(slow_index, 0, short_vector_effective_size, 3) += pos_segment_deformation.topRows(short_vector_effective_size);
+  
+  // Update targets
+  position_d_ = trajectory_deformation.row(slow_index) + trajectory_positions.row(slow_index);
+  orientation_d_ = Eigen::Quaterniond(trajectory_orientations(slow_index, 3),
+                                      trajectory_orientations(slow_index, 0), 
+                                      trajectory_orientations(slow_index, 1), 
+                                      trajectory_orientations(slow_index, 2));
+}
+
+void ShyCartesianController::computeTau(franka::RobotState& robot_state, Eigen::VectorXd& tau_d)
+{
+  Eigen::Affine3d transform(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+  Eigen::Vector3d position(transform.translation());
+  Eigen::Quaterniond orientation(transform.rotation());
+
+  std::array<double, 7> coriolis_array = model_handle_->getCoriolis();
+  std::array<double, 42> jacobian_array = model_handle_->getZeroJacobian(franka::Frame::kEndEffector);
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> coriolis(coriolis_array.data());
+  Eigen::Map<Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> tau_J_d(robot_state.tau_J_d.data());  
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> q(robot_state.q.data());
+  Eigen::Map<Eigen::Matrix<double, 7, 1>> dq(robot_state.dq.data());
+
+  ros::Time uptime = time_data_.readFromRT()->uptime;
   // compute error to desired pose
   // position error
   Eigen::Matrix<double, 6, 1> error;
@@ -320,7 +332,7 @@ void  ShyCartesianController::update(const ros::Time& time,
   {
     ROS_WARN("Position error is too big. Dropping the goal");
     preemptActiveGoal();
-    this->startRequest(time_data.uptime);
+    this->startRequest(uptime);
   }
 
   // orientation error
@@ -336,11 +348,11 @@ void  ShyCartesianController::update(const ros::Time& time,
   if (!error.allFinite()) {
     ROS_ERROR("Error is not finite. Stopping the controller.");
     preemptActiveGoal();
-    this->stopRequest(time_data.uptime);
+    this->stopRequest(uptime);
   }
   // compute control
   // allocate variables
-  Eigen::VectorXd tau_task(7), tau_nullspace(7), tau_d(7);
+  Eigen::VectorXd tau_task(7), tau_nullspace(7);
   // pseudoinverse for nullspace handling
   // kinematic pseuoinverse
   Eigen::MatrixXd jacobian_transpose_pinv;
@@ -356,24 +368,27 @@ void  ShyCartesianController::update(const ros::Time& time,
   // Desired torque
   tau_d << tau_task + tau_nullspace + coriolis;
   // Saturate torque rate to avoid discontinuities
-  tau_d << saturateTorqueRate(tau_d, tau_J_d);
-  // sending tau to the robot
-  for (size_t i = 0; i < 7; ++i) {
-    joint_handles_[i].setCommand(tau_d(i));
-  }
-
-  cartesian_stiffness_ =
-      filter_params_ * cartesian_stiffness_target_ + (1.0 - filter_params_) * cartesian_stiffness_;
-  cartesian_damping_ =
-      filter_params_ * cartesian_damping_target_ + (1.0 - filter_params_) * cartesian_damping_;
-  nullspace_stiffness_ =
-      filter_params_ * nullspace_stiffness_target_ + (1.0 - filter_params_) * nullspace_stiffness_;
-  // deformed_segment_length = std::max(10, static_cast<int>(std::floor(trajectory_length*deformed_segment_ratio_target_)));
-}  // end update()
+  tau_d << saturateTorqueRate(tau_d, tau_J_d);  
+}
 
 void ShyCartesianController::stopping(const ros::Time& /*time*/)
 {
   preemptActiveGoal();
+}
+
+void ShyCartesianController::successActiveGoal()
+{
+  RealtimeGoalHandlePtr current_active_goal(rt_active_goal_);
+  ROS_INFO("Trajectory execution finished after %d waypoints", slow_index+1);
+  slow_index = 0;
+  have_trajectory = false;
+  if (current_active_goal) {
+    current_active_goal->preallocated_result_->error_code = control_msgs::FollowJointTrajectoryResult::SUCCESSFUL;
+    current_active_goal->setSucceeded(current_active_goal->preallocated_result_);        // TODO: why tf it doesn't work?
+    current_active_goal->runNonRealtime(ros::TimerEvent());                              // now it works. doesn't look realtime-safe though
+    current_active_goal.reset(); 
+    rt_active_goal_.reset();
+  }
 }
 
 void ShyCartesianController::setActionFeedback(State& desired_state, State& current_state)
@@ -442,7 +457,6 @@ void ShyCartesianController::parseTrajectory(const trajectory_msgs::JointTraject
   trajectory_positions    = Eigen::MatrixXd(trajectory_length, 3);
   trajectory_orientations = Eigen::MatrixXd(trajectory_length, 4);
   trajectory_deformation  = Eigen::MatrixXd::Zero(trajectory_length, 7);
-  trajectory_velocities   = Eigen::MatrixXd(trajectory_length, 6);
   trajectory_times        = Eigen::MatrixXi(trajectory_length, 1); 
   
   // update from dynamic reconfigure
