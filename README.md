@@ -28,7 +28,7 @@ roslaunch franka_experiments hw_moveit_shy_controller.launch controller:=shy_joi
 
 ## Notes
 Consider editing these files before your hardware experiments.  Examples of the edited config files are available in *config/examples* folder.
-- Edit **simple_moveit_controllers.yaml** to include *shy_controller* and *shy_cartesian_controller* in *panda_moveit_config* config files to run the controllers with moveit. Moveit is going to try to connect with all the controllers listed in the file though, so for faster bringup it's better to leave only the needed controller(s).  
+- Edit the **simple_moveit_controllers.yaml** in the *panda_moveit_config* package config files to include *shy_joint_controller* and *shy_cartesian_controller*, regestring the controllers with moveit. Moveit is going to try to connect with all the controllers listed in the file though, so for faster bringup it's better to leave only the needed controller(s).  
 - Edit **franka_control_node.yaml** at *franka_ros/franka_control/config/* to lower the external force thresholds.
 - Edit **default_controllers.yaml** in *franka_control* package to set a higher update rate for *franka_state_controller*. It might be useful for parameter control. 
 - Edit **franka_control.launch** in *panda_moveit_config* to comment out default controllers bringup.
